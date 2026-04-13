@@ -1,0 +1,240 @@
+GazeMetric - Main Professional Features (Detailed)
+Last updated: 2026-04-13
+
+Purpose
+- This document expands the main features that can make GazeMetric look production-ready and recruiter-friendly.
+- Each feature includes: what it is, why it matters, and how to implement it in this codebase.
+
+Current baseline
+- Main runtime: engagement_analysis_full.py
+- Shared logic: core/analysis_logic.py, core/reporting.py
+- Current strengths: real-time webcam analysis, engagement/head pose labels, summary output
+
+============================================================
+1) Offline Video Analysis Mode
+============================================================
+What it is
+- Allow users to analyze a saved video file instead of only webcam input.
+
+Why it matters
+- Makes your tool usable for demos, recorded interviews, and reproducible testing.
+- Shows that the project is useful beyond a live-only prototype.
+
+Implementation details
+- Add CLI arguments:
+  - --source webcam|video
+  - --input path/to/video.mp4 (required for video mode)
+  - --output-video path/to/annotated.mp4 (optional)
+- Replace fixed cv2.VideoCapture(0) with dynamic source selection.
+- In video mode, read FPS and frame size from source; initialize VideoWriter if output path is provided.
+- Keep analysis pipeline identical so webcam and file analysis share the same logic.
+
+Definition of done
+- Works for webcam and mp4 inputs.
+- Can save an annotated output video.
+
+============================================================
+2) Session Timeline Analytics
+============================================================
+What it is
+- Store per-frame metrics and labels (timestamp, head pose, gaze, engagement, confidence).
+
+Why it matters
+- Gives evidence of time trends, not just end-of-run percentages.
+- Enables future charts, dashboards, and post-analysis reports.
+
+Implementation details
+- Create a per-frame record structure:
+  - frame_index
+  - timestamp_seconds
+  - x_angle, y_angle
+  - gaze_direction
+  - engagement_label
+- Append records to a list during processing.
+- At session end, export to CSV and JSON.
+
+Definition of done
+- timeline.csv and timeline.json are generated for each run.
+- All major labels are traceable by timestamp.
+
+============================================================
+3) Composite Engagement Score (0-100)
+============================================================
+What it is
+- A single continuous score combining head pose and gaze centering signals.
+
+Why it matters
+- Recruiters and non-technical users can understand one score quickly.
+- Shows applied ML engineering and feature weighting decisions.
+
+Implementation details
+- Compute normalized component scores:
+  - head_pose_score (low angle magnitude -> higher score)
+  - gaze_score (forward/centered -> higher score)
+- Example weighted formula:
+  - final_score = 0.55 * head_pose_score + 0.45 * gaze_score
+- Smooth score with rolling average over recent N frames.
+- Display live score and include session average/min/max.
+
+Definition of done
+- Score updates in real-time.
+- Session report includes score statistics.
+
+============================================================
+4) User Calibration Step
+============================================================
+What it is
+- A short guided baseline capture phase (10-15 seconds) before analysis starts.
+
+Why it matters
+- Improves reliability across different face geometry, camera positions, and lighting.
+- Shows practical robustness design.
+
+Implementation details
+- Add a calibration mode before main loop:
+  - prompt user to look straight at camera
+  - collect baseline means and variance for gaze/head pose
+- Use baseline-adjusted thresholds in classification functions.
+- Save per-user calibration in a local profile file (optional).
+
+Definition of done
+- Model/threshold behavior changes based on calibration values.
+- Engagement jitter is reduced compared to no-calibration mode.
+
+============================================================
+5) Quality and Confidence Meter
+============================================================
+What it is
+- On-screen quality indicators for tracking reliability and environment quality.
+
+Why it matters
+- Makes output more trustworthy.
+- Helps users understand when predictions are less reliable.
+
+Implementation details
+- Add real-time quality checks:
+  - face_visibility_score (bounding box area and stability)
+  - lighting_score (mean brightness and contrast)
+  - landmark_stability (frame-to-frame landmark movement noise)
+- Combine into a confidence meter (Low/Medium/High).
+- Show warnings such as:
+  - Low light
+  - Face too far
+  - Frequent occlusion
+
+Definition of done
+- Confidence meter shown in UI.
+- Warnings appear when quality drops below thresholds.
+
+============================================================
+6) Professional Report Export (CSV/JSON/PDF)
+============================================================
+What it is
+- Automatic report artifacts after each run.
+
+Why it matters
+- Essential for portfolio, stakeholder sharing, and reproducibility.
+- Strong product-quality signal.
+
+Implementation details
+- Export folder structure per run:
+  - runs/<timestamp>/timeline.csv
+  - runs/<timestamp>/summary.json
+  - runs/<timestamp>/summary.pdf
+- Use matplotlib/seaborn for charts in PDF:
+  - engagement score over time
+  - head direction distribution
+  - gaze direction distribution
+
+Definition of done
+- One command creates complete run artifacts.
+- PDF includes charts plus key KPI summary.
+
+============================================================
+7) Lightweight Dashboard UI
+============================================================
+What it is
+- A simple local dashboard for replay and interactive metric inspection.
+
+Why it matters
+- Recruiters can inspect results visually without reading raw files.
+- Demonstrates end-to-end thinking (ML + UI + data flow).
+
+Implementation details
+- Start with Streamlit (fastest path) or Flask + frontend.
+- Dashboard sections:
+  - Session selector
+  - KPI cards (avg score, engagement ratio, head stability)
+  - Timeline plots
+  - Frame metrics table
+  - Optional synchronized video replay
+
+Definition of done
+- Dashboard loads session outputs and displays charts/tables.
+- No manual data wrangling required by user.
+
+============================================================
+8) API Mode for Integration
+============================================================
+What it is
+- Expose analysis through REST endpoints for external integration.
+
+Why it matters
+- Shows software architecture maturity and service design ability.
+- Enables future web/mobile integration.
+
+Implementation details
+- Use FastAPI with endpoints such as:
+  - POST /analyze/video (upload file, return job ID)
+  - GET /analyze/{job_id}/status
+  - GET /analyze/{job_id}/results
+- Reuse the same core processing modules used by CLI.
+- Add Pydantic schemas for typed request/response payloads.
+
+Definition of done
+- API can process a video and return structured output files/JSON.
+- Documentation available at /docs.
+
+============================================================
+9) Privacy and Responsible AI Features
+============================================================
+What it is
+- Privacy controls and ethical usage safeguards.
+
+Why it matters
+- Important for real-world deployment and recruiter confidence.
+- Shows responsible engineering, not just technical functionality.
+
+Implementation details
+- Add runtime options:
+  - --no-save-frames
+  - --anonymize-output (blur face region in saved video)
+  - --consent-banner
+- Add clear disclaimer in README:
+  - tool is assistive analytics, not a final decision system
+  - explain known limitations and potential bias risks
+
+Definition of done
+- Privacy flags work and are documented.
+- Outputs can be generated without storing raw identifiable frames.
+
+============================================================
+Recommended build order (for fastest professional impact)
+============================================================
+Phase 1 (high impact, low-medium effort)
+- Offline video analysis mode
+- Session timeline analytics
+- Composite engagement score
+- Exportable reports (CSV/JSON)
+
+Phase 2 (professional polish)
+- Calibration
+- Confidence meter
+- Dashboard
+
+Phase 3 (advanced)
+- API mode
+- Privacy features
+- PDF report generation
+
+End of document.
