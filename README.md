@@ -131,7 +131,6 @@ Example:
 
 - You can place multiple videos in `Video` and choose one with the `--input` path.
 - File names can be anything.
-- The `RECRUITER_FEATURES_DETAILED.txt` file is kept as a planning and showcase document.
 
 ## License
 
