@@ -1,3 +1,5 @@
+"""Per-frame timeline logging to CSV/JSON."""
+
 import csv
 import json
 import os

@@ -1,3 +1,5 @@
+"""Per-frame quality signals: face visibility, lighting, landmark stability."""
+
 import cv2
 import numpy as np
 

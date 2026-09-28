@@ -1,3 +1,5 @@
+"""Console banners and summary output for analysis runs."""
+
 import pandas as pd
 
 

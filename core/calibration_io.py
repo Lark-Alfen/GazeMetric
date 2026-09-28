@@ -1,3 +1,5 @@
+"""Load and save calibration profiles as JSON."""
+
 import json
 import os
 

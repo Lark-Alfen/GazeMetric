@@ -1,3 +1,5 @@
+"""Composite engagement scoring from head pose and gaze."""
+
 def clamp01(value):
     return max(0.0, min(1.0, float(value)))
 

@@ -1,3 +1,5 @@
+"""Interactive baseline calibration phase run before analysis."""
+
 import time
 
 import cv2

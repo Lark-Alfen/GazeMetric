@@ -1,3 +1,5 @@
+"""Head pose, gaze scoring, and calibration profile helpers."""
+
 import cv2
 import numpy as np
 

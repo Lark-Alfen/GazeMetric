@@ -1,3 +1,5 @@
+"""Build and export end-of-session summary reports."""
+
 import json
 import os
 from collections import Counter
