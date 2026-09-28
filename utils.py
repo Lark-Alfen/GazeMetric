@@ -2,6 +2,7 @@
 
 Author: Asadullah Dal 
 Youtube Channel: https://www.youtube.com/c/aiphile
+Drawing and color helpers used by the GazeMetric overlays.
 
 '''
 

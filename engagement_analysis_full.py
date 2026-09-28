@@ -1,3 +1,5 @@
+"""Main engagement analysis pipeline shared by live and recorded modes."""
+
 from __future__ import division
 
 import argparse

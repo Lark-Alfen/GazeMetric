@@ -1,3 +1,5 @@
+"""Entry point: engagement analysis from a live webcam feed."""
+
 import argparse
 
 from engagement_analysis_full import main

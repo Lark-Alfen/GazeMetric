@@ -1,3 +1,5 @@
+"""Entry point: engagement analysis on a recorded video file."""
+
 import argparse
 import os
 
