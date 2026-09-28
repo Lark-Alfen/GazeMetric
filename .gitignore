@@ -27,5 +27,5 @@ profiles/
 .DS_Store
 Thumbs.db
 
-# Temporary converted dependency file
-requirements_utf8.txt
+# Local environment files
+.env
