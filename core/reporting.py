@@ -2,7 +2,6 @@
 
 from collections import Counter
 
-
 LINE = "=" * 70
 
 

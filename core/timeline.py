@@ -5,7 +5,6 @@ import json
 import os
 from datetime import datetime
 
-
 TIMELINE_FIELDNAMES = [
     "frame_index",
     "timestamp_seconds",

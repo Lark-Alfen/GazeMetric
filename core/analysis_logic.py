@@ -3,7 +3,6 @@
 import cv2
 import numpy as np
 
-
 FACE_3D_TEMPLATE = np.array(
     [
         [0.0, 0.0, 0.0],

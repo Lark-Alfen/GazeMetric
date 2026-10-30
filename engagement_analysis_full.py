@@ -110,6 +110,11 @@ def main(args):
         save_calibration_profile,
     )
     from core.calibration_runtime import run_calibration_phase
+    from core.quality import (
+        compute_quality_metrics,
+        get_default_quality_state,
+    )
+    from core.report_exports import export_session_reports
     from core.reporting import (
         print_interrupted_banner,
         print_score_summary,
@@ -117,11 +122,6 @@ def main(args):
         print_stopping_banner,
         print_summary,
     )
-    from core.quality import (
-        compute_quality_metrics,
-        get_default_quality_state,
-    )
-    from core.report_exports import export_session_reports
     from core.scoring import compute_composite_engagement_score
     from core.timeline import (
         create_face_timeline_record,
