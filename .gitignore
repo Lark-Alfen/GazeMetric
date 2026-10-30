@@ -29,3 +29,16 @@ Thumbs.db
 
 # Local environment files
 .env
+
+# Inputs/outputs that may contain people's faces
+Video/
+Models/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+
+# Calibration profiles and session outputs
+*_profile.json
+session_*/
