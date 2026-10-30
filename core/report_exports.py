@@ -3,7 +3,7 @@
 import json
 import os
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def _to_float(value):
@@ -71,7 +71,7 @@ def build_summary_payload(timeline_records, source_type, input_path=None, output
     warning_counter = _extract_warning_counts(face_records)
 
     payload = {
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "run_context": {
             "source_type": source_type,
             "input_path": input_path,

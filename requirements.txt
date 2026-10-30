@@ -1,4 +1,13 @@
-mediapipe==0.10.8
-numpy==1.26.1
-opencv-contrib-python==4.8.1.78
-matplotlib==3.8.1
+# Supported Python: 3.11 and 3.12.
+# mediapipe 0.10.21 is the last release that still ships the mp.solutions API
+# used by this project, and it has no Python 3.13 wheel.
+mediapipe==0.10.21
+numpy==1.26.4
+opencv-contrib-python==4.11.0.86
+matplotlib==3.11.2
+
+# Transitive dependencies pinned to patched releases (pip-audit).
+# mediapipe 0.10.21 requires protobuf<5.
+protobuf>=4.25.8,<5
+Pillow>=13.0.0
+fonttools>=4.60.2
