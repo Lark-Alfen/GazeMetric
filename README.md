@@ -22,7 +22,7 @@ Core capabilities:
 
 ## What You Need
 
-- Python 3.10 or newer
+- Python 3.11 or 3.12
 - A webcam (for live mode) or a video file (for recorded mode)
 
 ## Quick Setup (Windows)
