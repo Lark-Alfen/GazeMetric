@@ -10,4 +10,4 @@ matplotlib==3.11.2
 # mediapipe 0.10.21 requires protobuf<5.
 protobuf>=4.25.8,<5
 Pillow>=13.0.0
-fonttools>=4.60.2
+fonttools>=4.67.0
