@@ -3,7 +3,7 @@
 # used by this project, and it has no Python 3.13 wheel.
 mediapipe==0.10.21
 numpy==1.26.4
-opencv-contrib-python==4.11.0.86
+opencv-contrib-python==5.0.0.93
 matplotlib==3.11.2
 
 # Transitive dependencies pinned to patched releases (pip-audit).
