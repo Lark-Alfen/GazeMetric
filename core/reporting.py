@@ -1,6 +1,6 @@
 """Console banners and summary output for analysis runs."""
 
-import pandas as pd
+from collections import Counter
 
 
 LINE = "=" * 70
@@ -39,12 +39,10 @@ def print_summary(statements, engagement_states):
     print("                    HEAD POSITION ANALYSIS")
     print(LINE)
 
-    df = pd.DataFrame(data={"statement": statements})
     if len(statements) > 0:
-        statement_counts = df["statement"].value_counts()
-        statement_percentages = (statement_counts / len(statements)) * 100
         print("\nPercentage of time spent in each head position:\n")
-        for position, percentage in statement_percentages.items():
+        for position, count in Counter(statements).most_common():
+            percentage = (count / len(statements)) * 100
             print(f"  {position:20s}: {percentage:6.2f}%")
         print(f"\nTotal frames analyzed: {len(statements)}")
     else:
@@ -54,12 +52,10 @@ def print_summary(statements, engagement_states):
     print("                    ENGAGEMENT LEVEL ANALYSIS")
     print(LINE)
 
-    df = pd.DataFrame(data={"Engagement": engagement_states})
     if len(engagement_states) > 0:
-        engagement_counts = df["Engagement"].value_counts()
-        engagement_percentages = (engagement_counts / len(engagement_states)) * 100
         print("\nPercentage of time in each engagement state:\n")
-        for engagement, percentage in engagement_percentages.items():
+        for engagement, count in Counter(engagement_states).most_common():
+            percentage = (count / len(engagement_states)) * 100
             print(f"  {engagement:20s}: {percentage:6.2f}%")
         print(f"\nTotal frames analyzed: {len(engagement_states)}")
     else:
