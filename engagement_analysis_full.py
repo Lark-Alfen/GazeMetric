@@ -256,10 +256,6 @@ def main(args):
                     (
                         face_2d,
                         face_2d_head,
-                        face_2d_one,
-                        face_3d_one,
-                        nose_2d,
-                        nose_3d,
                     ) = extract_landmark_arrays(face_landmarks, img_w, img_h)
 
                     quality_state = quality_states.setdefault(face_index, get_default_quality_state())
@@ -272,14 +268,11 @@ def main(args):
                     )
 
                     last_scores = compute_gaze_scores(face_2d, last_scores, threshold)
-                    cam_matrix, dist_coeffs, dist_matrix = build_camera_and_distortion(img_w, img_h)
+                    cam_matrix, dist_coeffs = build_camera_and_distortion(img_w, img_h)
                     pose_data = solve_pose_vectors(
                         face_2d_head,
-                        face_2d_one,
-                        face_3d_one,
                         cam_matrix,
                         dist_coeffs,
-                        dist_matrix,
                         leye_3d,
                         reye_3d,
                     )
@@ -305,12 +298,10 @@ def main(args):
                     )
                     draw_nose_direction(
                         frame,
-                        nose_2d,
-                        nose_3d,
                         pose_data["rot_vec"],
                         pose_data["trans_vec"],
                         cam_matrix,
-                        dist_matrix,
+                        dist_coeffs,
                     )
 
                     gaze_direction = classify_gaze_direction(
