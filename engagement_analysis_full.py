@@ -203,7 +203,7 @@ def main(args):
                 save_calibration_profile(calibration_profile, args.calibration_profile)
                 print(f"Saved calibration profile to: {args.calibration_profile}")
         else:
-            print("Calibration could not collect enough data. Using default thresholds.")
+            print("No usable calibration. Using default thresholds.")
 
         if args.source == "video":
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)

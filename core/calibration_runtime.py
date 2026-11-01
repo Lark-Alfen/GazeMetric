@@ -139,4 +139,8 @@ def run_calibration_phase(
             f"({len(calibration_samples)}/{min_samples}). Using blended profile."
         )
 
-    return build_calibration_profile(calibration_samples, min_samples=min_samples), False
+    profile = build_calibration_profile(calibration_samples, min_samples=min_samples)
+    if profile["sample_count"] == 0:
+        # rejected: build_calibration_profile already said why and handed back the defaults
+        return None, False
+    return profile, False
