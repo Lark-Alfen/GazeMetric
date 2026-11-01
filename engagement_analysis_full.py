@@ -130,18 +130,20 @@ def main(args):
     )
     from core.scoring import compute_composite_engagement_score
     from core.timeline import (
+        TimelineWriter,
         create_face_timeline_record,
         create_no_face_timeline_record,
         create_pose_failed_timeline_record,
-        export_timeline_records,
+        read_timeline_csv,
         resolve_timeline_output_dir,
         video_frame_timestamp,
+        write_timeline_json,
     )
     from core.video_output import AnnotatedVideoWriter
 
     statements = []
     engagement_states = []
-    timeline_records = []
+    timeline_writer = None
     engagement_score_values = []
     quality_states = {}
     last_scores = {"lx": 0.0, "ly": 0.0, "rx": 0.0, "ry": 0.0}
@@ -248,6 +250,7 @@ def main(args):
         print_calibration_profile_summary(calibration_profile)
         print_startup_banner()
 
+        timeline_writer = TimelineWriter(timeline_output_dir)
         session_start_time = time.perf_counter()
         session_started = True
 
@@ -310,7 +313,7 @@ def main(args):
                             reye_3d,
                         )
                         if pose_data is None:
-                            timeline_records.append(
+                            timeline_writer.write(
                                 create_pose_failed_timeline_record(
                                     frame_index=frame_index,
                                     timestamp_seconds=timestamp_seconds,
@@ -377,7 +380,7 @@ def main(args):
 
                         engagement_states.append(engagement_text)
                         statements.append(head_text)
-                        timeline_records.append(
+                        timeline_writer.write(
                             create_face_timeline_record(
                                 frame_index=frame_index,
                                 timestamp_seconds=timestamp_seconds,
@@ -484,7 +487,7 @@ def main(args):
                         )
 
                 if not frame_has_record:
-                    timeline_records.append(
+                    timeline_writer.write(
                         create_no_face_timeline_record(
                             frame_index=frame_index,
                             timestamp_seconds=timestamp_seconds,
@@ -523,13 +526,16 @@ def main(args):
     finally:
         if failed_frames:
             print(f"{failed_frames} frame(s) were skipped because of errors.")
+        if timeline_writer is not None:
+            timeline_writer.close()
         if session_started:
             print_summary(statements, engagement_states)
             print_score_summary(engagement_score_values)
             try:
-                timeline_csv_path, timeline_json_path = export_timeline_records(timeline_records, timeline_output_dir)
-                print(f"Saved timeline CSV to: {timeline_csv_path}")
-                print(f"Saved timeline JSON to: {timeline_json_path}")
+                timeline_records = read_timeline_csv(timeline_writer.csv_path)
+                write_timeline_json(timeline_records, timeline_writer.json_path)
+                print(f"Saved timeline CSV to: {timeline_writer.csv_path}")
+                print(f"Saved timeline JSON to: {timeline_writer.json_path}")
 
                 summary_json_path, summary_pdf_path, summary_pdf_error = export_session_reports(
                     timeline_records,

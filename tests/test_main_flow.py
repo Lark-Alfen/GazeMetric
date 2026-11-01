@@ -120,3 +120,37 @@ def test_a_valid_profile_is_loaded_and_left_alone(main_run, video, tmp_path):
     assert "Loaded calibration profile" in main_run.output
     assert profile_path.read_text(encoding="utf-8") == before
     assert list(tmp_path.glob("profile.json.*")) == []
+
+
+def test_timeline_json_and_csv_are_both_written_and_agree(main_run, video):
+    assert main_run.run(main_run.args(video)) == 0
+    session = main_run.session_dir()
+    with open(f"{session}/timeline.json", encoding="utf-8") as handle:
+        records = json.load(handle)
+    rows = main_run.timeline_rows()
+    assert len(records) == len(rows) == 40
+    assert [str(r["frame_index"]) for r in records] == [row["frame_index"] for row in rows]
+    assert isinstance(records[0]["timestamp_seconds"], float)
+    assert isinstance(records[0]["face_index"], int)
+
+
+def test_timeline_rows_are_on_disk_while_the_run_is_still_going(main_run, video):
+    import core.quality
+
+    real = core.quality.compute_quality_metrics
+    seen = {}
+
+    def spy(*args, **kwargs):
+        if "rows" not in seen and len(seen.setdefault("calls", [])) == 70:
+            seen["rows"] = main_run.timeline_rows()
+        seen["calls"].append(1)
+        return real(*args, **kwargs)
+
+    longer = video.replace("clip.mp4", "longer.mp4")
+    from tests.conftest import make_video
+
+    make_video(longer, frames=100)
+    main_run.monkeypatch.setattr(core.quality, "compute_quality_metrics", spy)
+    assert main_run.run(main_run.args(longer)) == 0
+    assert seen["rows"] is not None
+    assert len(seen["rows"]) == 60  # 70 frames done, flushed in blocks of 30
