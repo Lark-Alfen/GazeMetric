@@ -30,6 +30,10 @@ GAZE_SIDE_MIN_DELTA = 0.028
 GAZE_UP_MIN_DELTA = 0.045
 GAZE_DOWN_MIN_DELTA = 0.03
 
+# A head pose is rejected when the model, projected back with the solved pose, misses the detected
+# landmarks by more than this fraction of the distance between the outer eye corners.
+MAX_POSE_REPROJECTION_RATIO = 0.25
+
 
 def _clamp(value, min_value, max_value):
     return max(min_value, min(max_value, float(value)))
@@ -292,35 +296,86 @@ def build_camera_and_distortion(img_w, img_h):
     return cam_matrix, dist_coeffs
 
 
+def _is_plausible_head_pose(face_2d_head, rot_vec, trans_vec, cam_matrix, dist_coeffs):
+    # solvePnP reports success for almost any input, so check the result instead: finite values, the
+    # whole model in front of the camera, and a projection that matches the detected landmarks.
+    if not (np.all(np.isfinite(rot_vec)) and np.all(np.isfinite(trans_vec))):
+        return False
+
+    rmat, _ = cv2.Rodrigues(rot_vec)
+    model_in_camera = HEAD_MODEL_3D @ rmat.T + trans_vec.reshape(1, 3)
+    if np.any(model_in_camera[:, 2] <= 0):
+        return False
+
+    projected, _ = cv2.projectPoints(HEAD_MODEL_3D, rot_vec, trans_vec, cam_matrix, dist_coeffs)
+    mean_error = np.mean(np.linalg.norm(projected.reshape(-1, 2) - face_2d_head, axis=1))
+    eye_distance = np.linalg.norm(face_2d_head[2] - face_2d_head[3])
+    return bool(mean_error <= MAX_POSE_REPROJECTION_RATIO * eye_distance)
+
+
+def _initial_head_pose_guess(face_2d_head, cam_matrix):
+    # Start the iterative solve from a frontal pose at the depth implied by the eye distance. Without a
+    # starting point it sometimes converges on a mirrored solution behind the camera for distant faces.
+    eye_distance_px = float(np.linalg.norm(face_2d_head[2] - face_2d_head[3]))
+    if not np.isfinite(eye_distance_px) or eye_distance_px < 1.0:
+        return None
+
+    focal_length = cam_matrix[0][0]
+    model_eye_distance = float(np.linalg.norm(HEAD_MODEL_3D[2] - HEAD_MODEL_3D[3]))
+    depth = focal_length * model_eye_distance / eye_distance_px
+    nose_x, nose_y = face_2d_head[0]
+    tvec = np.array(
+        [
+            [(nose_x - cam_matrix[0][2]) * depth / focal_length],
+            [(nose_y - cam_matrix[1][2]) * depth / focal_length],
+            [depth],
+        ],
+        dtype=np.float64,
+    )
+    return np.zeros((3, 1), dtype=np.float64), tvec
+
+
 def solve_pose_vectors(face_2d_head, cam_matrix, dist_coeffs, leye_3d, reye_3d):
     """Solve head pose from the six head landmarks.
 
     x_angle and y_angle are in degrees: positive x_angle is the head tilted up, positive
-    y_angle is the head turned toward the right of the image.
+    y_angle is the head turned toward the right of the image. Returns None when the head pose cannot
+    be solved. "eye_axes_valid" is False when only one of the per-eye solves failed; the head angles
+    are still usable then, but the eye and gaze axes must not be drawn.
     """
-    _, l_rvec, l_tvec = cv2.solvePnP(
-        leye_3d,
-        face_2d_head,
-        cam_matrix,
-        dist_coeffs,
-        flags=cv2.SOLVEPNP_ITERATIVE,
-    )
-    _, r_rvec, r_tvec = cv2.solvePnP(
-        reye_3d,
-        face_2d_head,
-        cam_matrix,
-        dist_coeffs,
-        flags=cv2.SOLVEPNP_ITERATIVE,
-    )
+    guess = _initial_head_pose_guess(face_2d_head, cam_matrix)
+    if guess is None:
+        return None
+    rvec_guess, tvec_guess = guess
 
-    success_pnp, rot_vec, trans_vec = cv2.solvePnP(
-        HEAD_MODEL_3D,
-        face_2d_head,
-        cam_matrix,
-        dist_coeffs,
-        flags=cv2.SOLVEPNP_ITERATIVE,
-    )
-    if not success_pnp:
+    try:
+        ok_l, l_rvec, l_tvec = cv2.solvePnP(
+            leye_3d,
+            face_2d_head,
+            cam_matrix,
+            dist_coeffs,
+            flags=cv2.SOLVEPNP_ITERATIVE,
+        )
+        ok_r, r_rvec, r_tvec = cv2.solvePnP(
+            reye_3d,
+            face_2d_head,
+            cam_matrix,
+            dist_coeffs,
+            flags=cv2.SOLVEPNP_ITERATIVE,
+        )
+        success_pnp, rot_vec, trans_vec = cv2.solvePnP(
+            HEAD_MODEL_3D,
+            face_2d_head,
+            cam_matrix,
+            dist_coeffs,
+            rvec_guess,
+            tvec_guess,
+            True,
+            flags=cv2.SOLVEPNP_ITERATIVE,
+        )
+    except cv2.error:
+        return None
+    if not success_pnp or not _is_plausible_head_pose(face_2d_head, rot_vec, trans_vec, cam_matrix, dist_coeffs):
         return None
 
     rmat, _ = cv2.Rodrigues(rot_vec)
@@ -333,12 +388,16 @@ def solve_pose_vectors(face_2d_head, cam_matrix, dist_coeffs, leye_3d, reye_3d):
         "r_tvec": r_tvec,
         "rot_vec": rot_vec,
         "trans_vec": trans_vec,
+        "eye_axes_valid": bool(ok_l and ok_r),
         "x_angle": -float(angles[0]),
         "y_angle": -float(angles[1]),
     }
 
 
 def build_projection_data(pose_data, cam_matrix, dist_coeffs, gaze_scores, x_score_multiplier, y_score_multiplier):
+    if not pose_data.get("eye_axes_valid", True):
+        return None
+
     l_gaze_rvec = np.array(pose_data["l_rvec"])
     l_gaze_rvec[2][0] -= (gaze_scores["lx"] - 0.5) * x_score_multiplier
     l_gaze_rvec[0][0] += (gaze_scores["ly"] - 0.5) * y_score_multiplier
@@ -364,6 +423,9 @@ def build_projection_data(pose_data, cam_matrix, dist_coeffs, gaze_scores, x_sco
 
 
 def draw_pose_overlay(img, face_2d_head, projection_data, draw_headpose, draw_gaze, draw_full_axis):
+    if projection_data is None:
+        return
+
     l_corner = face_2d_head[2].astype(np.int32)
     r_corner = face_2d_head[3].astype(np.int32)
 

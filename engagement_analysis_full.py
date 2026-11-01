@@ -126,6 +126,7 @@ def main(args):
     from core.timeline import (
         create_face_timeline_record,
         create_no_face_timeline_record,
+        create_pose_failed_timeline_record,
         export_timeline_records,
         resolve_timeline_output_dir,
     )
@@ -277,6 +278,14 @@ def main(args):
                         reye_3d,
                     )
                     if pose_data is None:
+                        timeline_records.append(
+                            create_pose_failed_timeline_record(
+                                frame_index=frame_index,
+                                timestamp_seconds=timestamp_seconds,
+                                face_index=face_index,
+                            )
+                        )
+                        frame_has_record = True
                         continue
 
                     projection_data = build_projection_data(

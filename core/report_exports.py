@@ -5,6 +5,8 @@ import os
 from collections import Counter
 from datetime import datetime, timezone
 
+from core.timeline import POSE_UNAVAILABLE_LABEL
+
 
 def _to_float(value):
     if value is None:
@@ -82,6 +84,9 @@ def build_summary_payload(timeline_records, source_type, input_path=None, output
             "duration_seconds": round(duration_seconds, 3),
             "face_records": len(face_records),
             "no_face_records": len(no_face_records),
+            "pose_unavailable_records": sum(
+                1 for record in face_records if record.get("engagement_label") == POSE_UNAVAILABLE_LABEL
+            ),
             "engagement_score": {
                 "average": round(_safe_mean(engagement_scores), 2) if engagement_scores else None,
                 "min": round(min(engagement_scores), 2) if engagement_scores else None,
