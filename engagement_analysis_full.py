@@ -109,7 +109,7 @@ def main(args):
         print_calibration_profile_summary,
         save_calibration_profile,
     )
-    from core.calibration_runtime import run_calibration_phase
+    from core.calibration_runtime import CALIBRATION_QUIT, CALIBRATION_SKIPPED, run_calibration_phase
     from core.quality import (
         compute_quality_metrics,
         get_default_quality_state,
@@ -176,13 +176,14 @@ def main(args):
     elif args.skip_calibration:
         print("Skipping calibration and using default thresholds.")
     else:
-        generated_profile, should_stop = run_calibration_phase(
+        generated_profile, calibration_status = run_calibration_phase(
             cap=cap,
             face_mesh=face_mesh,
             mp_face_mesh=mp_face_mesh,
             mp_drawing=mp_drawing,
             source_type=args.source,
             calibration_seconds=args.calibration_seconds,
+            source_fps=source_fps,
             threshold=threshold,
             leye_3d=leye_3d,
             reye_3d=reye_3d,
@@ -192,7 +193,7 @@ def main(args):
             solve_pose_vectors=solve_pose_vectors,
             build_calibration_profile=build_calibration_profile,
         )
-        if should_stop:
+        if calibration_status == CALIBRATION_QUIT:
             cap.release()
             cv2.destroyAllWindows()
             face_mesh.close()
@@ -203,6 +204,8 @@ def main(args):
             if args.calibration_profile:
                 save_calibration_profile(calibration_profile, args.calibration_profile)
                 print(f"Saved calibration profile to: {args.calibration_profile}")
+        elif calibration_status == CALIBRATION_SKIPPED:
+            print("Using default thresholds.")
         else:
             print("No usable calibration. Using default thresholds.")
 

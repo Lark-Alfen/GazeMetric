@@ -4,6 +4,31 @@ import time
 
 import cv2
 
+# Outcomes of run_calibration_phase
+CALIBRATION_COMPLETED = "completed"
+CALIBRATION_SKIPPED = "skipped"
+CALIBRATION_INSUFFICIENT = "insufficient"
+CALIBRATION_QUIT = "quit"
+
+# Share of the frames in the calibration window that should produce a usable sample (video input).
+VIDEO_MIN_SAMPLE_SHARE = 0.4
+
+
+def get_calibration_plan(source_type, calibration_seconds, source_fps):
+    """How long calibration runs and how many samples it should collect.
+
+    A webcam is measured in wall-clock seconds. A recorded video is measured in frames of the video, so the
+    result does not depend on how fast the machine happens to process it. Returns
+    (calibration_seconds, frame_limit or None, min_samples).
+    """
+    calibration_seconds = max(1.0, float(calibration_seconds))
+    if source_type != "video":
+        return calibration_seconds, None, max(20, int(calibration_seconds * 8))
+
+    frame_limit = max(1, int(calibration_seconds * source_fps))
+    min_samples = min(frame_limit, max(20, int(frame_limit * VIDEO_MIN_SAMPLE_SHARE)))
+    return calibration_seconds, frame_limit, min_samples
+
 
 def run_calibration_phase(
     cap,
@@ -12,6 +37,7 @@ def run_calibration_phase(
     mp_drawing,
     source_type,
     calibration_seconds,
+    source_fps,
     threshold,
     leye_3d,
     reye_3d,
@@ -23,8 +49,8 @@ def run_calibration_phase(
 ):
     calibration_samples = []
     calibration_scores = {"lx": 0.0, "ly": 0.0, "rx": 0.0, "ry": 0.0}
-    calibration_seconds = max(1.0, float(calibration_seconds))
-    min_samples = max(20, int(calibration_seconds * 8))
+    calibration_seconds, frame_limit, min_samples = get_calibration_plan(source_type, calibration_seconds, source_fps)
+    frames_read = 0
     start_time = time.perf_counter()
 
     print("\n" + "=" * 70)
@@ -37,6 +63,7 @@ def run_calibration_phase(
         success, raw_frame = cap.read()
         if not success:
             break
+        frames_read += 1
 
         processing_frame = cv2.flip(raw_frame, 1) if source_type == "webcam" else raw_frame
 
@@ -83,8 +110,13 @@ def run_calibration_phase(
                     }
                 )
 
-        elapsed = time.perf_counter() - start_time
-        remaining = max(0.0, calibration_seconds - elapsed)
+        if frame_limit is None:
+            elapsed = time.perf_counter() - start_time
+            remaining = max(0.0, calibration_seconds - elapsed)
+            finished = elapsed >= calibration_seconds
+        else:
+            remaining = max(0.0, (frame_limit - frames_read) / source_fps)
+            finished = frames_read >= frame_limit
 
         cv2.putText(
             frame,
@@ -122,16 +154,16 @@ def run_calibration_phase(
         key = cv2.waitKey(5) & 0xFF
         if key == ord("s") or key == ord("S"):
             print("Calibration skipped by user input.")
-            return None, False
+            return None, CALIBRATION_SKIPPED
         if key == ord("q") or key == ord("Q"):
             print("Stopping before analysis.")
-            return None, True
+            return None, CALIBRATION_QUIT
 
-        if elapsed >= calibration_seconds:
+        if finished:
             break
 
     if not calibration_samples:
-        return None, False
+        return None, CALIBRATION_INSUFFICIENT
 
     if len(calibration_samples) < min_samples:
         print(
@@ -142,5 +174,5 @@ def run_calibration_phase(
     profile = build_calibration_profile(calibration_samples, min_samples=min_samples)
     if profile["sample_count"] == 0:
         # rejected: build_calibration_profile already said why and handed back the defaults
-        return None, False
-    return profile, False
+        return None, CALIBRATION_INSUFFICIENT
+    return profile, CALIBRATION_COMPLETED
