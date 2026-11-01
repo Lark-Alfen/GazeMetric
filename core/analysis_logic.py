@@ -20,6 +20,16 @@ FACE_3D_TEMPLATE = np.array(
 HEAD_MODEL_3D = FACE_3D_TEMPLATE * np.array([1.0, -1.0, -1.0])
 NOSE_AXIS_LENGTH = 300.0
 
+# Gaze classification works on the raw difference from the calibrated gaze centre. These raw-difference
+# limits were tuned for GAZE_REFERENCE_TOLERANCE (the default profile's tolerance); a profile with a
+# wider tolerance scales them up by tolerance / GAZE_REFERENCE_TOLERANCE, a narrower one keeps them.
+GAZE_REFERENCE_TOLERANCE = 0.08
+GAZE_FORWARD_MAX_DELTA_H = 0.022
+GAZE_FORWARD_MAX_DELTA_V = 0.03
+GAZE_SIDE_MIN_DELTA = 0.028
+GAZE_UP_MIN_DELTA = 0.045
+GAZE_DOWN_MIN_DELTA = 0.03
+
 
 def _clamp(value, min_value, max_value):
     return max(min_value, min(max_value, float(value)))
@@ -403,6 +413,9 @@ def classify_gaze_direction(gaze_scores, calibration_profile=None):
     rx_offset = (float(gaze_scores["rx"]) - gaze_center["rx"]) / max(gaze_tolerance["rx"], 1e-6)
     ry_offset = (float(gaze_scores["ry"]) - gaze_center["ry"]) / max(gaze_tolerance["ry"], 1e-6)
 
+    h_scale = max(1.0, (gaze_tolerance["lx"] + gaze_tolerance["rx"]) / 2.0 / GAZE_REFERENCE_TOLERANCE)
+    v_scale = max(1.0, (gaze_tolerance["ly"] + gaze_tolerance["ry"]) / 2.0 / GAZE_REFERENCE_TOLERANCE)
+
     horizontal_offset = (lx_offset + rx_offset) / 2.0
     vertical_offset = (ly_offset + ry_offset) / 2.0
     horizontal_raw_delta = (lx_delta + rx_delta) / 2.0
@@ -413,8 +426,8 @@ def classify_gaze_direction(gaze_scores, calibration_profile=None):
     centered = (
         x_centered
         and y_centered
-        and abs(horizontal_raw_delta) <= 0.022
-        and abs(vertical_raw_delta) <= 0.03
+        and abs(horizontal_raw_delta) <= GAZE_FORWARD_MAX_DELTA_H * h_scale
+        and abs(vertical_raw_delta) <= GAZE_FORWARD_MAX_DELTA_V * v_scale
     )
     if centered:
         return "Forward"
@@ -423,21 +436,21 @@ def classify_gaze_direction(gaze_scores, calibration_profile=None):
     vertical_strength = abs(vertical_offset)
 
     right_candidate = (
-        horizontal_raw_delta > 0.028
+        horizontal_raw_delta > GAZE_SIDE_MIN_DELTA * h_scale
         and (
             horizontal_offset > 0.35
             or max(lx_offset, rx_offset) > 0.70
         )
     )
     left_candidate = (
-        horizontal_raw_delta < -0.028
+        horizontal_raw_delta < -GAZE_SIDE_MIN_DELTA * h_scale
         and (
             horizontal_offset < -0.35
             or min(lx_offset, rx_offset) < -0.70
         )
     )
-    up_candidate = vertical_raw_delta < -0.045 and vertical_offset < -0.85
-    down_candidate = vertical_raw_delta > 0.03 and vertical_offset > 0.42
+    up_candidate = vertical_raw_delta < -GAZE_UP_MIN_DELTA * v_scale and vertical_offset < -0.85
+    down_candidate = vertical_raw_delta > GAZE_DOWN_MIN_DELTA * v_scale and vertical_offset > 0.42
 
     if (up_candidate or down_candidate) and vertical_strength > (horizontal_strength + 0.08):
         return "Up" if up_candidate else "Down"
