@@ -15,6 +15,11 @@ FACE_3D_TEMPLATE = np.array(
     dtype=np.float64,
 )
 
+# FACE_3D_TEMPLATE is written with y up and z toward the camera. OpenCV camera axes have y down and
+# z away from the camera, so head pose is solved against the template with y and z flipped.
+HEAD_MODEL_3D = FACE_3D_TEMPLATE * np.array([1.0, -1.0, -1.0])
+NOSE_AXIS_LENGTH = 300.0
+
 
 def _clamp(value, min_value, max_value):
     return max(min_value, min(max_value, float(value)))
@@ -204,25 +209,11 @@ def build_eye_reference_points():
 
 def extract_landmark_arrays(face_landmarks, img_w, img_h):
     face_2d = []
-    face_2d_one = []
-    face_3d_one = []
 
-    nose_2d = (0.0, 0.0)
-    nose_3d = (0.0, 0.0, 0.0)
-
-    for idx, lm in enumerate(face_landmarks.landmark):
-        if idx == 1:
-            nose_2d = (lm.x * img_w, lm.y * img_h)
-            nose_3d = (lm.x * img_w, lm.y * img_h, lm.z * 8000)
-
-        x, y = int(lm.x * img_w), int(lm.y * img_h)
-        face_2d.append((x, y))
-        face_2d_one.append([x, y])
-        face_3d_one.append([x, y, lm.z])
+    for lm in face_landmarks.landmark:
+        face_2d.append((int(lm.x * img_w), int(lm.y * img_h)))
 
     face_2d = np.asarray(face_2d, dtype=np.float64)
-    face_2d_one = np.asarray(face_2d_one, dtype=np.float64)
-    face_3d_one = np.asarray(face_3d_one, dtype=np.float64)
 
     face_2d_head = np.array(
         [
@@ -235,7 +226,7 @@ def extract_landmark_arrays(face_landmarks, img_w, img_h):
         ],
         dtype=np.float64,
     )
-    return face_2d, face_2d_head, face_2d_one, face_3d_one, nose_2d, nose_3d
+    return face_2d, face_2d_head
 
 
 def compute_gaze_scores(face_2d, previous_scores, threshold):
@@ -288,11 +279,15 @@ def build_camera_and_distortion(img_w, img_h):
         dtype=np.float64,
     )
     dist_coeffs = np.zeros((4, 1), dtype=np.float64)
-    dist_matrix = np.zeros((4, 1), dtype=np.float64)
-    return cam_matrix, dist_coeffs, dist_matrix
+    return cam_matrix, dist_coeffs
 
 
-def solve_pose_vectors(face_2d_head, face_2d_one, face_3d_one, cam_matrix, dist_coeffs, dist_matrix, leye_3d, reye_3d):
+def solve_pose_vectors(face_2d_head, cam_matrix, dist_coeffs, leye_3d, reye_3d):
+    """Solve head pose from the six head landmarks.
+
+    x_angle and y_angle are in degrees: positive x_angle is the head tilted up, positive
+    y_angle is the head turned toward the right of the image.
+    """
     _, l_rvec, l_tvec = cv2.solvePnP(
         leye_3d,
         face_2d_head,
@@ -308,7 +303,13 @@ def solve_pose_vectors(face_2d_head, face_2d_one, face_3d_one, cam_matrix, dist_
         flags=cv2.SOLVEPNP_ITERATIVE,
     )
 
-    success_pnp, rot_vec, trans_vec = cv2.solvePnP(face_3d_one, face_2d_one, cam_matrix, dist_matrix)
+    success_pnp, rot_vec, trans_vec = cv2.solvePnP(
+        HEAD_MODEL_3D,
+        face_2d_head,
+        cam_matrix,
+        dist_coeffs,
+        flags=cv2.SOLVEPNP_ITERATIVE,
+    )
     if not success_pnp:
         return None
 
@@ -322,8 +323,8 @@ def solve_pose_vectors(face_2d_head, face_2d_one, face_3d_one, cam_matrix, dist_
         "r_tvec": r_tvec,
         "rot_vec": rot_vec,
         "trans_vec": trans_vec,
-        "x_angle": angles[0] * 360,
-        "y_angle": angles[1] * 360,
+        "x_angle": -float(angles[0]),
+        "y_angle": -float(angles[1]),
     }
 
 
@@ -377,16 +378,12 @@ def draw_pose_overlay(img, face_2d_head, projection_data, draw_headpose, draw_ga
         cv2.line(img, r_corner, tuple(np.ravel(projection_data["r_gaze_axis"][2]).astype(np.int32)), (0, 0, 255), 3)
 
 
-def draw_nose_direction(img, nose_2d, nose_3d, rot_vec, trans_vec, cam_matrix, dist_matrix):
-    nose_3d_projection, _ = cv2.projectPoints(
-        np.array([nose_3d], dtype=np.float64),
-        rot_vec,
-        trans_vec,
-        cam_matrix,
-        dist_matrix,
-    )
-    p1 = (int(nose_2d[0]), int(nose_2d[1]))
-    p2 = (int(nose_3d_projection[0][0][0]), int(nose_3d_projection[0][0][1]))
+def draw_nose_direction(img, rot_vec, trans_vec, cam_matrix, dist_coeffs):
+    # The model's nose is its origin; the axis points out of the face toward the camera.
+    nose_points = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, -NOSE_AXIS_LENGTH]], dtype=np.float64)
+    projected, _ = cv2.projectPoints(nose_points, rot_vec, trans_vec, cam_matrix, dist_coeffs)
+    p1 = (int(projected[0][0][0]), int(projected[0][0][1]))
+    p2 = (int(projected[1][0][0]), int(projected[1][0][1]))
     cv2.line(img, p1, p2, (255, 0, 0), 3)
 
 

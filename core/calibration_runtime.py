@@ -60,21 +60,14 @@ def run_calibration_phase(
             (
                 face_2d,
                 face_2d_head,
-                face_2d_one,
-                face_3d_one,
-                _nose_2d,
-                _nose_3d,
             ) = extract_landmark_arrays(face_landmarks, img_w, img_h)
 
             calibration_scores = compute_gaze_scores(face_2d, calibration_scores, threshold)
-            cam_matrix, dist_coeffs, dist_matrix = build_camera_and_distortion(img_w, img_h)
+            cam_matrix, dist_coeffs = build_camera_and_distortion(img_w, img_h)
             pose_data = solve_pose_vectors(
                 face_2d_head,
-                face_2d_one,
-                face_3d_one,
                 cam_matrix,
                 dist_coeffs,
-                dist_matrix,
                 leye_3d,
                 reye_3d,
             )
