@@ -109,8 +109,10 @@ def main(args):
         solve_pose_vectors,
     )
     from core.calibration_io import (
+        ProfileLoadError,
         load_calibration_profile,
         print_calibration_profile_summary,
+        quarantine_unreadable_profile,
         save_calibration_profile,
     )
     from core.calibration_runtime import CALIBRATION_QUIT, CALIBRATION_SKIPPED, run_calibration_phase
@@ -187,7 +189,13 @@ def main(args):
         leye_3d, reye_3d = build_eye_reference_points()
 
         calibration_profile = get_default_calibration_profile()
-        loaded_calibration_profile = load_calibration_profile(args.calibration_profile)
+        try:
+            loaded_calibration_profile = load_calibration_profile(args.calibration_profile)
+        except ProfileLoadError as load_error:
+            bad_profile_path = quarantine_unreadable_profile(args.calibration_profile)
+            print(f"Calibration profile is unusable: {load_error}")
+            print(f"Moved it to {bad_profile_path} and continuing without it.")
+            loaded_calibration_profile = None
 
         if loaded_calibration_profile is not None:
             calibration_profile = loaded_calibration_profile
