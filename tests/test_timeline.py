@@ -4,6 +4,7 @@ from core.timeline import (
     create_face_timeline_record,
     create_no_face_timeline_record,
     create_pose_failed_timeline_record,
+    video_frame_timestamp,
 )
 
 
@@ -65,3 +66,28 @@ def test_summary_counts_pose_unavailable_as_its_own_bucket():
     # failed-pose frames have no score, so they must not drag the average toward zero
     assert payload["kpis"]["engagement_score"]["samples"] == 2
     assert payload["kpis"]["engagement_score"]["average"] == 85.0
+
+
+# ---------------------------------------------------------------- video timestamps
+def test_video_timestamp_counts_frames_when_no_position_is_reported():
+    assert video_frame_timestamp(1, 25.0) == 0.0
+    assert video_frame_timestamp(26, 25.0, position_msec=0.0) == 1.0
+    assert video_frame_timestamp(91, 30.0) == 3.0
+
+
+def test_video_timestamp_prefers_the_decoder_position():
+    # variable frame rate: the 10th frame sits at 0.9s although 10 frames at 30fps would be 0.3s
+    assert video_frame_timestamp(10, 30.0, position_msec=900.4) == 0.9
+
+
+def test_video_timestamp_ignores_a_zero_or_negative_position_after_the_first_frame():
+    assert video_frame_timestamp(31, 30.0, position_msec=0.0) == 1.0
+    assert video_frame_timestamp(31, 30.0, position_msec=-1.0) == 1.0
+
+
+def test_video_timestamp_does_not_depend_on_wall_clock_time():
+    import time
+
+    first = video_frame_timestamp(50, 25.0)
+    time.sleep(0.05)
+    assert video_frame_timestamp(50, 25.0) == first
