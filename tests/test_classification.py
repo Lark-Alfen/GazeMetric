@@ -1,6 +1,9 @@
 import pytest
 
 from core.analysis_logic import (
+    GAZE_FORWARD_MAX_DELTA_H,
+    GAZE_FORWARD_MAX_DELTA_V,
+    GAZE_REFERENCE_TOLERANCE,
     classify_engagement,
     classify_gaze_direction,
     classify_head_direction,
@@ -52,6 +55,53 @@ def test_gaze_is_relative_to_the_calibrated_center():
     looking_at_calibrated_center = {"lx": 0.62, "rx": 0.62, "ly": 0.5, "ry": 0.5}
     assert classify_gaze_direction(looking_at_calibrated_center, calibration_profile=profile) == "Forward"
     assert classify_gaze_direction(gaze(), calibration_profile=profile) != "Forward"
+
+
+def profile_with_tolerance(tolerance):
+    profile = get_default_calibration_profile()
+    profile["gaze_tolerance"] = {key: tolerance for key in ("lx", "ly", "rx", "ry")}
+    return profile
+
+
+@pytest.mark.parametrize("tolerance", [0.08, 0.16, 0.25])
+def test_wider_calibrated_tolerance_widens_the_forward_band_horizontally(tolerance):
+    scale = tolerance / GAZE_REFERENCE_TOLERANCE
+    inside = 0.9 * GAZE_FORWARD_MAX_DELTA_H * scale
+    profile = profile_with_tolerance(tolerance)
+    assert classify_gaze_direction(gaze(inside, 0.0), calibration_profile=profile) == "Forward"
+    assert classify_gaze_direction(gaze(-inside, 0.0), calibration_profile=profile) == "Forward"
+
+
+@pytest.mark.parametrize("tolerance", [0.08, 0.16, 0.25])
+def test_wider_calibrated_tolerance_widens_the_forward_band_vertically(tolerance):
+    scale = tolerance / GAZE_REFERENCE_TOLERANCE
+    inside = 0.9 * GAZE_FORWARD_MAX_DELTA_V * scale
+    profile = profile_with_tolerance(tolerance)
+    assert classify_gaze_direction(gaze(0.0, inside), calibration_profile=profile) == "Forward"
+    assert classify_gaze_direction(gaze(0.0, -inside), calibration_profile=profile) == "Forward"
+
+
+def test_the_same_offset_is_forward_with_a_wide_tolerance_and_not_with_the_default():
+    scores = gaze(0.05, 0.0)
+    assert classify_gaze_direction(scores, calibration_profile=profile_with_tolerance(0.08)) != "Forward"
+    assert classify_gaze_direction(scores, calibration_profile=profile_with_tolerance(0.25)) == "Forward"
+
+
+@pytest.mark.parametrize("tolerance", [0.04, 0.08, 0.16, 0.25])
+@pytest.mark.parametrize(
+    "dx, dy, expected",
+    [(2.0, 0.0, "Right"), (-2.0, 0.0, "Left"), (0.0, 2.0, "Down"), (0.0, -2.0, "Up")],
+)
+def test_offsets_of_twice_the_tolerance_are_always_a_direction(tolerance, dx, dy, expected):
+    profile = profile_with_tolerance(tolerance)
+    assert classify_gaze_direction(gaze(dx * tolerance, dy * tolerance), calibration_profile=profile) == expected
+
+
+@pytest.mark.parametrize("tolerance", [0.04, 0.06, 0.08])
+def test_tolerances_at_or_below_the_default_keep_the_original_forward_band(tolerance):
+    profile = profile_with_tolerance(tolerance)
+    assert classify_gaze_direction(gaze(0.02, 0.0), calibration_profile=profile) == "Forward"
+    assert classify_gaze_direction(gaze(0.03, 0.0), calibration_profile=profile) != "Forward"
 
 
 # ---------------------------------------------------------------- classify_head_direction
