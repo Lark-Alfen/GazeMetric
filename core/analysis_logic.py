@@ -30,6 +30,9 @@ GAZE_SIDE_MIN_DELTA = 0.028
 GAZE_UP_MIN_DELTA = 0.045
 GAZE_DOWN_MIN_DELTA = 0.03
 
+# Both eyes below this eye-aspect ratio (lid gap / eye width) count as a blink.
+EYE_CLOSED_THRESHOLD = 0.15
+
 # A head pose is rejected when the model, projected back with the solved pose, misses the detected
 # landmarks by more than this fraction of the distance between the outer eye corners.
 MAX_POSE_REPROJECTION_RATIO = 0.25
@@ -243,7 +246,26 @@ def extract_landmark_arrays(face_landmarks, img_w, img_h):
     return face_2d, face_2d_head
 
 
+def _eye_aspect_ratio(face_2d, upper_lid, lower_lid, outer_corner, inner_corner):
+    width = abs(face_2d[outer_corner, 0] - face_2d[inner_corner, 0])
+    if width == 0:
+        return 0.0
+    return float(abs(face_2d[upper_lid, 1] - face_2d[lower_lid, 1]) / width)
+
+
+def compute_eye_openness(face_2d):
+    """Eye aspect ratios (lid gap over eye width) for the eye with iris 468 and the eye with iris 473."""
+    first_eye = _eye_aspect_ratio(face_2d, upper_lid=159, lower_lid=145, outer_corner=33, inner_corner=133)
+    second_eye = _eye_aspect_ratio(face_2d, upper_lid=386, lower_lid=374, outer_corner=263, inner_corner=362)
+    return first_eye, second_eye
+
+
 def compute_gaze_scores(face_2d, previous_scores, threshold):
+    """Smoothed iris position ratios for both eyes.
+
+    During a blink the lid landmarks collapse onto each other, which makes the vertical ratios meaningless,
+    so ly and ry keep their previous values until at least one eye is open again.
+    """
     last_lx = previous_scores["lx"]
     last_ly = previous_scores["ly"]
     last_rx = previous_scores["rx"]
@@ -260,7 +282,9 @@ def compute_gaze_scores(face_2d, previous_scores, threshold):
             current = (current + last_lx) / 2
         lx_score = current
 
-    if (face_2d[23, 1] - face_2d[27, 1]) != 0:
+    blinking = max(compute_eye_openness(face_2d)) < EYE_CLOSED_THRESHOLD
+
+    if not blinking and (face_2d[23, 1] - face_2d[27, 1]) != 0:
         current = (face_2d[468, 1] - face_2d[27, 1]) / (face_2d[23, 1] - face_2d[27, 1])
         if abs(current - last_ly) < threshold:
             current = (current + last_ly) / 2
@@ -272,7 +296,7 @@ def compute_gaze_scores(face_2d, previous_scores, threshold):
             current = (current + last_rx) / 2
         rx_score = current
 
-    if (face_2d[253, 1] - face_2d[257, 1]) != 0:
+    if not blinking and (face_2d[253, 1] - face_2d[257, 1]) != 0:
         current = (face_2d[473, 1] - face_2d[257, 1]) / (face_2d[253, 1] - face_2d[257, 1])
         if abs(current - last_ry) < threshold:
             current = (current + last_ry) / 2
