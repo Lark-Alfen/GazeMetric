@@ -184,3 +184,36 @@ def test_closing_the_window_during_calibration_stops_before_analysis(main_run, v
     assert main_run.session_dir() is None
     assert main_run.captures[0].released
     assert main_run.face_mesh.closed
+
+
+def test_the_banner_is_printed_before_calibration_starts(main_run, video):
+    main_run.keys = [ord("q")]
+    assert main_run.run(main_run.args(video, skip_calibration=False)) == 0
+    output = main_run.output
+    assert "EngageVision - Full Engagement Analysis System" in output
+    assert output.index("Full Engagement Analysis System") < output.index("Calibration step started")
+    assert output.count("Full Engagement Analysis System") == 1
+
+
+def test_the_banner_names_the_video_source(main_run, video):
+    assert main_run.run(main_run.args(video)) == 0
+    assert "video file is analyzed" in main_run.output
+    assert "camera" not in main_run.output.lower()
+
+
+def test_ctrl_c_still_prints_the_summary_and_writes_the_reports(main_run, video):
+    calls = {"count": 0}
+    original_wait = main_run._wait_key
+
+    def interrupt_on_frame_10(delay):
+        calls["count"] += 1
+        if calls["count"] == 10:
+            raise KeyboardInterrupt
+        return original_wait(delay)
+
+    main_run.monkeypatch.setattr("cv2.waitKey", interrupt_on_frame_10)
+    assert main_run.run(main_run.args(video)) == 0
+    assert "Interrupted by user (Ctrl+C). Generating summary" in main_run.output
+    assert "ENGAGEMENT LEVEL ANALYSIS" in main_run.output
+    assert "Saved session summary JSON" in main_run.output
+    assert len(main_run.timeline_rows()) == 10
