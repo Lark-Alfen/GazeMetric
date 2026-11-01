@@ -284,7 +284,7 @@ def compute_gaze_scores(face_2d, previous_scores, threshold):
 def build_camera_and_distortion(img_w, img_h):
     focal_length = 1 * img_w
     cam_matrix = np.array(
-        [[focal_length, 0, img_h / 2], [0, focal_length, img_w / 2], [0, 0, 1]],
+        [[focal_length, 0, img_w / 2], [0, focal_length, img_h / 2], [0, 0, 1]],
         dtype=np.float64,
     )
     dist_coeffs = np.zeros((4, 1), dtype=np.float64)
