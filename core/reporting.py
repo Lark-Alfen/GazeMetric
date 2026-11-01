@@ -5,7 +5,7 @@ from collections import Counter
 LINE = "=" * 70
 
 
-def print_startup_banner():
+def print_startup_banner(source_type="webcam", show_window=True):
     print(LINE)
     print("       EngageVision - Full Engagement Analysis System")
     print(LINE)
@@ -14,9 +14,13 @@ def print_startup_banner():
     print("  - Gaze direction tracking (Engaged/Not Engaged)")
     print("  - Real-time facial landmark detection")
     print("\nControls:")
-    print("  - Press 'Q' or 'q' in the video window to stop and see summary")
-    print("  - DO NOT use Ctrl+C (it will skip the summary)")
-    print("\nStarting camera...")
+    if show_window:
+        print("  - Press 'Q' or 'q' in the video window, or close it, to stop and see the summary")
+    print("  - Press Ctrl+C in this terminal to stop and see the summary")
+    if source_type == "video":
+        print("\nThe video file is analyzed from its first frame to the last.")
+    else:
+        print("\nThe camera is used until you stop the run.")
     print(LINE)
     print()
 

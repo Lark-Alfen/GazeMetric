@@ -191,6 +191,8 @@ def main(args):
 
         leye_3d, reye_3d = build_eye_reference_points()
 
+        print_startup_banner(args.source)
+
         calibration_profile = get_default_calibration_profile()
         try:
             loaded_calibration_profile = load_calibration_profile(args.calibration_profile)
@@ -249,7 +251,6 @@ def main(args):
         print(f"Timeline outputs will be saved to: {timeline_output_dir}")
         print(f"Engagement score smoothing window: {SCORE_SMOOTHING_WINDOW} frames")
         print_calibration_profile_summary(calibration_profile)
-        print_startup_banner()
 
         timeline_writer = TimelineWriter(timeline_output_dir)
         session_start_time = time.perf_counter()
