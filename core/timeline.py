@@ -28,6 +28,17 @@ TIMELINE_FIELDNAMES = [
 
 POSE_UNAVAILABLE_LABEL = "Pose Unavailable"
 
+FLUSH_EVERY_ROWS = 30
+
+_INTEGER_FIELDS = {"frame_index", "face_index"}
+_TEXT_FIELDS = {
+    "gaze_direction",
+    "engagement_label",
+    "head_direction",
+    "quality_confidence_label",
+    "quality_warnings",
+}
+
 
 def video_frame_timestamp(frame_index, source_fps, position_msec=None):
     """Seconds into a recorded video for a 1-based frame index.
@@ -100,6 +111,59 @@ def _format_quality_warnings(quality_warnings):
     if isinstance(quality_warnings, list):
         return "; ".join(str(item) for item in quality_warnings if item)
     return str(quality_warnings)
+
+
+class TimelineWriter:
+    """Writes timeline.csv row by row while the session runs.
+
+    The file is created with its header at the start and flushed every `flush_every` rows, so a crash or a
+    killed process leaves everything but the last few rows behind. close() must be called to flush the rest.
+    """
+
+    def __init__(self, timeline_dir, flush_every=FLUSH_EVERY_ROWS):
+        os.makedirs(timeline_dir, exist_ok=True)
+        self.csv_path = os.path.join(timeline_dir, "timeline.csv")
+        self.json_path = os.path.join(timeline_dir, "timeline.json")
+        self.rows_written = 0
+        self._flush_every = flush_every
+        self._file = open(self.csv_path, "w", newline="", encoding="utf-8")
+        self._writer = csv.DictWriter(self._file, fieldnames=TIMELINE_FIELDNAMES)
+        self._writer.writeheader()
+        self._file.flush()
+
+    def write(self, record):
+        self._writer.writerow(record)
+        self.rows_written += 1
+        if self.rows_written % self._flush_every == 0:
+            self._file.flush()
+
+    def close(self):
+        if not self._file.closed:
+            self._file.close()
+
+
+def _parse_timeline_value(field, text):
+    if field in _TEXT_FIELDS:
+        return text
+    if text == "":
+        return None
+    if field in _INTEGER_FIELDS:
+        return int(text)
+    return float(text)
+
+
+def read_timeline_csv(csv_path):
+    """Read timeline.csv back into records with the same types the writer was given."""
+    with open(csv_path, newline="", encoding="utf-8") as csv_file:
+        return [
+            {field: _parse_timeline_value(field, row[field]) for field in TIMELINE_FIELDNAMES}
+            for row in csv.DictReader(csv_file)
+        ]
+
+
+def write_timeline_json(timeline_records, json_path):
+    with open(json_path, "w", encoding="utf-8") as json_file:
+        json.dump(timeline_records, json_file, indent=2)
 
 
 def create_face_timeline_record(

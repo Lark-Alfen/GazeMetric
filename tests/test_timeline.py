@@ -1,10 +1,16 @@
+import json
+
 from core.report_exports import build_summary_payload
 from core.timeline import (
     TIMELINE_FIELDNAMES,
+    TimelineWriter,
     create_face_timeline_record,
     create_no_face_timeline_record,
     create_pose_failed_timeline_record,
+    export_timeline_records,
+    read_timeline_csv,
     video_frame_timestamp,
+    write_timeline_json,
 )
 
 
@@ -91,3 +97,122 @@ def test_video_timestamp_does_not_depend_on_wall_clock_time():
     first = video_frame_timestamp(50, 25.0)
     time.sleep(0.05)
     assert video_frame_timestamp(50, 25.0) == first
+
+
+# ---------------------------------------------------------------- TimelineWriter
+def visible_rows(csv_path):
+    """What another process would see in the file right now (header excluded)."""
+    with open(csv_path, encoding="utf-8") as handle:
+        return len(handle.read().splitlines()) - 1
+
+
+def test_writer_creates_the_file_with_a_header_straight_away(tmp_path):
+    writer = TimelineWriter(str(tmp_path / "session"))
+    with open(writer.csv_path, encoding="utf-8") as handle:
+        assert handle.read().strip() == ",".join(TIMELINE_FIELDNAMES)
+    writer.close()
+
+
+def test_rows_are_flushed_every_thirty_so_a_killed_run_keeps_them(tmp_path):
+    writer = TimelineWriter(str(tmp_path))
+    for i in range(1, 30):
+        writer.write(face_record(i))
+    assert visible_rows(writer.csv_path) == 0  # not flushed yet
+
+    writer.write(face_record(30))
+    assert visible_rows(writer.csv_path) == 30
+
+    for i in range(31, 60):
+        writer.write(face_record(i))
+    assert visible_rows(writer.csv_path) == 30
+    writer.write(face_record(60))
+    assert visible_rows(writer.csv_path) == 60
+    writer.close()
+
+
+def test_close_writes_the_remaining_rows_and_can_be_called_twice(tmp_path):
+    writer = TimelineWriter(str(tmp_path))
+    for i in range(1, 8):
+        writer.write(face_record(i))
+    writer.close()
+    writer.close()
+    assert visible_rows(writer.csv_path) == 7
+    assert writer.rows_written == 7
+
+
+def test_writer_holds_no_records_in_memory(tmp_path):
+    writer = TimelineWriter(str(tmp_path))
+    for i in range(1, 200):
+        writer.write(face_record(i))
+    assert not any(isinstance(value, list) and len(value) > 5 for value in vars(writer).values())
+    writer.close()
+
+
+def test_every_record_type_survives_a_csv_round_trip(tmp_path):
+    records = [
+        face_record(1),
+        face_record(2, face_index=1, engagement="Not Engaged"),
+        create_pose_failed_timeline_record(frame_index=3, timestamp_seconds=0.3, face_index=0),
+        create_no_face_timeline_record(frame_index=4, timestamp_seconds=0.4),
+        create_face_timeline_record(
+            frame_index=5,
+            timestamp_seconds=0.5,
+            face_index=0,
+            x_angle=-12.3456,
+            y_angle=7.0,
+            gaze_direction="Left",
+            engagement_label="Not Engaged",
+            head_direction="Looking Left",
+            head_pose_score=12.5,
+            gaze_center_score=0.0,
+            engagement_score_raw=33.33,
+            engagement_score_smooth=40.1,
+            face_visibility_score=0.8123,
+            lighting_score=0.5,
+            landmark_stability_score=0.9,
+            quality_confidence_score=61.25,
+            quality_confidence_label="Medium",
+            quality_warnings=["Low light", "Frequent movement"],
+        ),
+    ]
+    writer = TimelineWriter(str(tmp_path))
+    for record in records:
+        writer.write(record)
+    writer.close()
+
+    assert read_timeline_csv(writer.csv_path) == records
+
+
+def test_streamed_timeline_matches_the_old_all_at_once_export(tmp_path):
+    records = [face_record(i) for i in range(1, 11)] + [create_no_face_timeline_record(11, 1.1)]
+
+    old_dir = tmp_path / "old"
+    old_csv, old_json = export_timeline_records(records, str(old_dir))
+
+    new_dir = tmp_path / "new"
+    writer = TimelineWriter(str(new_dir))
+    for record in records:
+        writer.write(record)
+    writer.close()
+    write_timeline_json(read_timeline_csv(writer.csv_path), writer.json_path)
+
+    with open(old_csv, "rb") as old_file, open(writer.csv_path, "rb") as new_file:
+        assert old_file.read() == new_file.read()
+    assert json.loads(open(old_json, encoding="utf-8").read()) == json.loads(open(writer.json_path, encoding="utf-8").read())
+
+
+def test_summary_from_the_re_read_csv_equals_the_summary_from_memory(tmp_path):
+    records = [face_record(i) for i in range(1, 6)] + [
+        create_pose_failed_timeline_record(frame_index=6, timestamp_seconds=0.6, face_index=0),
+        create_no_face_timeline_record(frame_index=7, timestamp_seconds=0.7),
+    ]
+    writer = TimelineWriter(str(tmp_path))
+    for record in records:
+        writer.write(record)
+    writer.close()
+
+    from_memory = build_summary_payload(records, source_type="video")
+    from_csv = build_summary_payload(read_timeline_csv(writer.csv_path), source_type="video")
+    from_memory.pop("generated_at")
+    from_csv.pop("generated_at")
+    assert from_csv == from_memory
