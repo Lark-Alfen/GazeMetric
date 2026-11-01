@@ -29,6 +29,18 @@ TIMELINE_FIELDNAMES = [
 POSE_UNAVAILABLE_LABEL = "Pose Unavailable"
 
 
+def video_frame_timestamp(frame_index, source_fps, position_msec=None):
+    """Seconds into a recorded video for a 1-based frame index.
+
+    Uses the position the decoder reports when there is one (this follows variable-frame-rate files) and
+    otherwise counts frames at source_fps. The first frame reports a position of 0, which is also what
+    the frame count gives.
+    """
+    if position_msec is not None and position_msec > 0:
+        return round(position_msec / 1000.0, 3)
+    return round((frame_index - 1) / source_fps, 3)
+
+
 def get_default_timeline_dir():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return os.path.join("runs", f"session_{timestamp}")

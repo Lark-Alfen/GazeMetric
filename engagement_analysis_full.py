@@ -129,6 +129,7 @@ def main(args):
         create_pose_failed_timeline_record,
         export_timeline_records,
         resolve_timeline_output_dir,
+        video_frame_timestamp,
     )
 
     statements = []
@@ -231,7 +232,10 @@ def main(args):
                 break
 
             frame_index += 1
-            timestamp_seconds = round(time.perf_counter() - session_start_time, 3)
+            if args.source == "video":
+                timestamp_seconds = video_frame_timestamp(frame_index, source_fps, cap.get(cv2.CAP_PROP_POS_MSEC))
+            else:
+                timestamp_seconds = round(time.perf_counter() - session_start_time, 3)
 
             processing_frame = cv2.flip(raw_frame, 1) if args.source == "webcam" else raw_frame
 
