@@ -116,6 +116,7 @@ def main(args):
         save_calibration_profile,
     )
     from core.calibration_runtime import CALIBRATION_QUIT, CALIBRATION_SKIPPED, run_calibration_phase
+    from core.display import WINDOW_NAME, window_was_closed
     from core.quality import (
         compute_quality_metrics,
         get_default_quality_state,
@@ -497,10 +498,10 @@ def main(args):
                 if output_writer is not None:
                     output_writer.write(frame)
 
-                cv2.imshow("EngageVision - Full Analysis", frame)
+                cv2.imshow(WINDOW_NAME, frame)
 
                 key = cv2.waitKey(5) & 0xFF
-                if key == ord("q") or key == ord("Q"):
+                if key == ord("q") or key == ord("Q") or window_was_closed():
                     print_stopping_banner()
                     break
             except Exception as exc:
