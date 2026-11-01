@@ -4,22 +4,45 @@ import json
 import os
 
 
+class ProfileLoadError(Exception):
+    """The profile file exists but cannot be used."""
+
+
 def load_calibration_profile(profile_path):
+    """Load a profile. Returns None when no path was given or the file does not exist yet.
+
+    Raises ProfileLoadError when the file exists but is not a readable profile, so a damaged file is never
+    mistaken for a missing one.
+    """
     if not profile_path or not os.path.exists(profile_path):
         return None
 
-    try:
-        from core.analysis_logic import normalize_calibration_profile
+    from core.analysis_logic import normalize_calibration_profile
 
+    try:
         with open(profile_path, "r", encoding="utf-8") as profile_file:
             profile_data = json.load(profile_file)
-        return normalize_calibration_profile(profile_data)
-    except Exception as exc:
-        print(f"Failed to load calibration profile ({profile_path}): {exc}")
-        return None
+    except (OSError, ValueError) as exc:
+        raise ProfileLoadError(f"{profile_path} could not be read: {exc}") from exc
+
+    if not isinstance(profile_data, dict):
+        raise ProfileLoadError(f"{profile_path} does not contain a calibration profile")
+    return normalize_calibration_profile(profile_data)
+
+
+def quarantine_unreadable_profile(profile_path):
+    """Move an unreadable profile aside to <path>.bad (or .bad.1, .bad.2 ...) and return the new path."""
+    bad_path = profile_path + ".bad"
+    suffix = 0
+    while os.path.exists(bad_path):
+        suffix += 1
+        bad_path = f"{profile_path}.bad.{suffix}"
+    os.replace(profile_path, bad_path)
+    return bad_path
 
 
 def save_calibration_profile(calibration_profile, profile_path):
+    """Write the profile through a temporary file so an interrupted save cannot leave a truncated one."""
     if not profile_path:
         return
 
@@ -27,8 +50,15 @@ def save_calibration_profile(calibration_profile, profile_path):
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
 
-    with open(profile_path, "w", encoding="utf-8") as profile_file:
-        json.dump(calibration_profile, profile_file, indent=2)
+    temp_path = profile_path + ".tmp"
+    try:
+        with open(temp_path, "w", encoding="utf-8") as profile_file:
+            json.dump(calibration_profile, profile_file, indent=2)
+        os.replace(temp_path, profile_path)
+    except BaseException:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise
 
 
 def print_calibration_profile_summary(calibration_profile):

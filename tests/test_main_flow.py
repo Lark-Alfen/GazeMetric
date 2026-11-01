@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 import core.calibration_runtime
@@ -82,3 +84,39 @@ def test_quitting_during_calibration_exits_zero_and_cleans_up(main_run, video):
 def test_entry_scripts_pass_the_exit_code_to_the_shell(script):
     with open(script, encoding="utf-8") as handle:
         assert "sys.exit(main(parse_arguments()))" in handle.read()
+
+
+def test_a_corrupt_profile_is_kept_as_bad_and_replaced_by_a_fresh_calibration(main_run, video, tmp_path):
+    profile_path = tmp_path / "profile.json"
+    corrupt = '{"head_center": {"x": '
+    profile_path.write_text(corrupt, encoding="utf-8")
+
+    assert main_run.run(main_run.args(video, skip_calibration=False, calibration_profile=str(profile_path))) == 0
+
+    assert "Calibration profile is unusable" in main_run.output
+    assert (tmp_path / "profile.json.bad").read_text(encoding="utf-8") == corrupt
+    saved = json.loads(profile_path.read_text(encoding="utf-8"))
+    assert saved["sample_count"] > 0
+
+
+def test_a_corrupt_profile_with_skipped_calibration_is_moved_not_overwritten(main_run, video, tmp_path):
+    profile_path = tmp_path / "profile.json"
+    profile_path.write_text("garbage", encoding="utf-8")
+
+    assert main_run.run(main_run.args(video, calibration_profile=str(profile_path))) == 0
+
+    assert not profile_path.exists()
+    assert (tmp_path / "profile.json.bad").read_text(encoding="utf-8") == "garbage"
+    assert "Skipping calibration" in main_run.output
+
+
+def test_a_valid_profile_is_loaded_and_left_alone(main_run, video, tmp_path):
+    profile_path = tmp_path / "profile.json"
+    profile_path.write_text(json.dumps({"head_center": {"x": 3.0, "y": 1.0}}), encoding="utf-8")
+    before = profile_path.read_text(encoding="utf-8")
+
+    assert main_run.run(main_run.args(video, calibration_profile=str(profile_path))) == 0
+
+    assert "Loaded calibration profile" in main_run.output
+    assert profile_path.read_text(encoding="utf-8") == before
+    assert list(tmp_path.glob("profile.json.*")) == []
