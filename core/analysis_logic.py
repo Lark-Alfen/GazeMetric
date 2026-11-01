@@ -33,6 +33,11 @@ GAZE_DOWN_MIN_DELTA = 0.03
 # Both eyes below this eye-aspect ratio (lid gap / eye width) count as a blink.
 EYE_CLOSED_THRESHOLD = 0.15
 
+# Calibration is rejected when the (robust) spread of the head angles is larger than this many degrees:
+# the person was not looking at the camera for most of it.
+CALIBRATION_MAX_HEAD_STD = 10.0
+MAD_TO_STD = 1.4826
+
 # A head pose is rejected when the model, projected back with the solved pose, misses the detected
 # landmarks by more than this fraction of the distance between the outer eye corners.
 MAX_POSE_REPROJECTION_RATIO = 0.25
@@ -127,6 +132,16 @@ def normalize_calibration_profile(profile):
     return normalized
 
 
+def _robust_center_and_spread(values):
+    """Median and a standard-deviation estimate from the median absolute deviation.
+
+    A few frames where the person glanced away or blinked move neither number, unlike mean and std.
+    """
+    center = float(np.median(values))
+    spread = float(MAD_TO_STD * np.median(np.abs(values - center)))
+    return center, spread
+
+
 def build_calibration_profile(calibration_samples, min_samples=20):
     if not calibration_samples:
         return get_default_calibration_profile()
@@ -149,35 +164,38 @@ def build_calibration_profile(calibration_samples, min_samples=20):
     x_angle = np.asarray([float(sample["x_angle"]) for sample in valid_samples], dtype=np.float64)
     y_angle = np.asarray([float(sample["y_angle"]) for sample in valid_samples], dtype=np.float64)
 
+    centers = {}
+    spreads = {}
+    for name, values in (("lx", lx), ("ly", ly), ("rx", rx), ("ry", ry), ("x_angle", x_angle), ("y_angle", y_angle)):
+        centers[name], spreads[name] = _robust_center_and_spread(values)
+
+    worst_head_spread = max(spreads["x_angle"], spreads["y_angle"])
+    if worst_head_spread > CALIBRATION_MAX_HEAD_STD:
+        print(
+            f"Calibration rejected: the head moved too much ({worst_head_spread:.1f} degrees spread, "
+            f"limit {CALIBRATION_MAX_HEAD_STD:.0f}). Look straight at the camera and try again."
+        )
+        return get_default_calibration_profile()
+
     sample_count = len(valid_samples)
     completion_ratio = min(1.0, sample_count / float(max(1, min_samples)))
 
     base_profile = get_default_calibration_profile()
     raw_profile = {
         "sample_count": sample_count,
-        "gaze_center": {
-            "lx": float(np.mean(lx)),
-            "ly": float(np.mean(ly)),
-            "rx": float(np.mean(rx)),
-            "ry": float(np.mean(ry)),
-        },
-        "gaze_tolerance": {
-            "lx": float(0.04 + (2.0 * np.std(lx))),
-            "ly": float(0.04 + (2.0 * np.std(ly))),
-            "rx": float(0.04 + (2.0 * np.std(rx))),
-            "ry": float(0.04 + (2.0 * np.std(ry))),
-        },
+        "gaze_center": {key: centers[key] for key in ("lx", "ly", "rx", "ry")},
+        "gaze_tolerance": {key: 0.04 + (2.0 * spreads[key]) for key in ("lx", "ly", "rx", "ry")},
         "head_center": {
-            "x": float(np.mean(x_angle)),
-            "y": float(np.mean(y_angle)),
+            "x": centers["x_angle"],
+            "y": centers["y_angle"],
         },
         "engagement_angle_threshold": {
-            "x": float(8.0 + (2.5 * np.std(x_angle))),
-            "y": float(8.0 + (2.5 * np.std(y_angle))),
+            "x": 8.0 + (2.5 * spreads["x_angle"]),
+            "y": 8.0 + (2.5 * spreads["y_angle"]),
         },
         "head_direction_threshold": {
-            "x": float(12.0 + (3.0 * np.std(x_angle))),
-            "y": float(12.0 + (3.0 * np.std(y_angle))),
+            "x": 12.0 + (3.0 * spreads["x_angle"]),
+            "y": 12.0 + (3.0 * spreads["y_angle"]),
         },
     }
 
