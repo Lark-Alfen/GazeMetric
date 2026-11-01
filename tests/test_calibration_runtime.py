@@ -112,6 +112,7 @@ def no_window(monkeypatch):
     monkeypatch.setattr(calibration_runtime.cv2, "imshow", lambda *_: None)
     monkeypatch.setattr(calibration_runtime.cv2, "waitKey", lambda *_: -1)
     monkeypatch.setattr(calibration_runtime.cv2, "putText", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(calibration_runtime, "window_was_closed", lambda: False)
 
 
 def test_video_calibration_stops_after_the_frames_of_the_window():
@@ -164,6 +165,14 @@ def test_pressing_q_reports_quit(monkeypatch):
     (profile, status), _, _ = run(frames=100, face_present=True)
     assert profile is None
     assert status == CALIBRATION_QUIT
+
+
+def test_closing_the_window_during_calibration_quits(monkeypatch):
+    monkeypatch.setattr(calibration_runtime, "window_was_closed", lambda: True)
+    (profile, status), cap, _ = run(frames=100, face_present=True)
+    assert profile is None
+    assert status == CALIBRATION_QUIT
+    assert cap.read_count == 1
 
 
 def test_rejected_calibration_reports_insufficient():

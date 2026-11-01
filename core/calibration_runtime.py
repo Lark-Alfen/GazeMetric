@@ -4,6 +4,8 @@ import time
 
 import cv2
 
+from core.display import WINDOW_NAME, window_was_closed
+
 # Outcomes of run_calibration_phase
 CALIBRATION_COMPLETED = "completed"
 CALIBRATION_SKIPPED = "skipped"
@@ -149,7 +151,7 @@ def run_calibration_phase(
             cv2.LINE_AA,
         )
 
-        cv2.imshow("EngageVision - Full Analysis", frame)
+        cv2.imshow(WINDOW_NAME, frame)
 
         key = cv2.waitKey(5) & 0xFF
         if key == ord("s") or key == ord("S"):
@@ -157,6 +159,9 @@ def run_calibration_phase(
             return None, CALIBRATION_SKIPPED
         if key == ord("q") or key == ord("Q"):
             print("Stopping before analysis.")
+            return None, CALIBRATION_QUIT
+        if window_was_closed():
+            print("Window closed. Stopping before analysis.")
             return None, CALIBRATION_QUIT
 
         if finished:

@@ -154,3 +154,33 @@ def test_timeline_rows_are_on_disk_while_the_run_is_still_going(main_run, video)
     assert main_run.run(main_run.args(longer)) == 0
     assert seen["rows"] is not None
     assert len(seen["rows"]) == 60  # 70 frames done, flushed in blocks of 30
+
+
+def test_closing_the_window_ends_the_run_and_still_writes_the_reports(main_run, video):
+    state = {"frames": 0}
+    original_wait = main_run._wait_key
+
+    def count_frames(delay):
+        state["frames"] += 1
+        return original_wait(delay)
+
+    main_run.monkeypatch.setattr("cv2.waitKey", count_frames)
+    main_run.window_visible = lambda: state["frames"] < 12  # the user clicks X during frame 12
+
+    assert main_run.run(main_run.args(video)) == 0
+
+    assert len(main_run.timeline_rows()) == 12
+    assert "Saved session summary JSON" in main_run.output
+    assert main_run.captures[0].released
+    assert main_run.face_mesh.closed
+
+
+def test_closing_the_window_during_calibration_stops_before_analysis(main_run, video):
+    main_run.window_visible = lambda: False
+
+    assert main_run.run(main_run.args(video, skip_calibration=False)) == 0
+
+    assert "Window closed" in main_run.output
+    assert main_run.session_dir() is None
+    assert main_run.captures[0].released
+    assert main_run.face_mesh.closed
