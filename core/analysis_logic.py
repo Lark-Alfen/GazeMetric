@@ -222,12 +222,12 @@ def build_eye_reference_points():
 
 
 def extract_landmark_arrays(face_landmarks, img_w, img_h):
-    face_2d = []
-
-    for lm in face_landmarks.landmark:
-        face_2d.append((int(lm.x * img_w), int(lm.y * img_h)))
-
-    face_2d = np.asarray(face_2d, dtype=np.float64)
+    # Keep sub-pixel precision: the eye ratios divide by eye widths of only a few tens of pixels, so
+    # truncating to whole pixels would add visible jitter. Cast to int only where drawing needs it.
+    face_2d = np.asarray(
+        [(lm.x * img_w, lm.y * img_h) for lm in face_landmarks.landmark],
+        dtype=np.float64,
+    )
 
     face_2d_head = np.array(
         [
