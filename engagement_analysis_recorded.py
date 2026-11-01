@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import sys
 
 from engagement_analysis_full import main
 
@@ -57,4 +58,4 @@ def parse_arguments():
 
 
 if __name__ == "__main__":
-    main(parse_arguments())
+    sys.exit(main(parse_arguments()))
