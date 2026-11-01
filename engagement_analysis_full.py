@@ -131,6 +131,7 @@ def main(args):
         resolve_timeline_output_dir,
         video_frame_timestamp,
     )
+    from core.video_output import AnnotatedVideoWriter
 
     statements = []
     engagement_states = []
@@ -163,7 +164,14 @@ def main(args):
     if source_fps <= 0:
         source_fps = 20.0
 
-    video_writer = None
+    output_writer = None
+    if args.output_video_path:
+        # recorded input has a real frame rate; a webcam's is measured from the first frames
+        output_writer = AnnotatedVideoWriter(
+            args.output_video_path,
+            fallback_fps=source_fps,
+            fps=source_fps if args.source == "video" else None,
+        )
 
     leye_3d, reye_3d = build_eye_reference_points()
 
@@ -466,24 +474,8 @@ def main(args):
                     )
                 )
 
-            if args.output_video_path:
-                if video_writer is None:
-                    output_dir = os.path.dirname(args.output_video_path)
-                    if output_dir:
-                        os.makedirs(output_dir, exist_ok=True)
-
-                    frame_h, frame_w = frame.shape[:2]
-                    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-                    video_writer = cv2.VideoWriter(
-                        args.output_video_path,
-                        fourcc,
-                        source_fps,
-                        (frame_w, frame_h),
-                    )
-                    if not video_writer.isOpened():
-                        raise RuntimeError(f"Unable to create output video: {args.output_video_path}")
-
-                video_writer.write(frame)
+            if output_writer is not None:
+                output_writer.write(frame)
 
             cv2.imshow("EngageVision - Full Analysis", frame)
 
@@ -521,8 +513,7 @@ def main(args):
             print(f"Failed to export timeline files: {timeline_error}")
 
         cap.release()
-        if video_writer is not None:
-            video_writer.release()
+        if output_writer is not None and output_writer.close():
             print(f"Saved annotated video to: {args.output_video_path}")
         cv2.destroyAllWindows()
         face_mesh.close()
