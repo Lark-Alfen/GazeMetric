@@ -26,6 +26,8 @@ TIMELINE_FIELDNAMES = [
     "quality_warnings",
 ]
 
+POSE_UNAVAILABLE_LABEL = "Pose Unavailable"
+
 
 def get_default_timeline_dir():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -136,6 +138,30 @@ def create_face_timeline_record(
         ),
         "quality_confidence_label": quality_confidence_label if quality_confidence_label is not None else "Unknown",
         "quality_warnings": warnings_text,
+    }
+
+
+def create_pose_failed_timeline_record(frame_index, timestamp_seconds, face_index):
+    """A face was detected but its head pose could not be solved."""
+    return {
+        "frame_index": frame_index,
+        "timestamp_seconds": timestamp_seconds,
+        "face_index": face_index,
+        "x_angle": None,
+        "y_angle": None,
+        "gaze_direction": POSE_UNAVAILABLE_LABEL,
+        "engagement_label": POSE_UNAVAILABLE_LABEL,
+        "head_direction": POSE_UNAVAILABLE_LABEL,
+        "head_pose_score": None,
+        "gaze_center_score": None,
+        "engagement_score_raw": None,
+        "engagement_score_smooth": None,
+        "face_visibility_score": None,
+        "lighting_score": None,
+        "landmark_stability_score": None,
+        "quality_confidence_score": None,
+        "quality_confidence_label": "Unknown",
+        "quality_warnings": POSE_UNAVAILABLE_LABEL,
     }
 
 

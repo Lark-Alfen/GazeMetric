@@ -6,6 +6,8 @@ from core.analysis_logic import (
     HEAD_MODEL_3D,
     build_camera_and_distortion,
     build_eye_reference_points,
+    build_projection_data,
+    draw_pose_overlay,
     solve_pose_vectors,
 )
 
@@ -92,3 +94,50 @@ def test_angles_do_not_depend_on_face_distance():
     far = solve(project_head(5, -25, distance=3000.0))
     assert near["y_angle"] == pytest.approx(far["y_angle"], abs=1.0)
     assert near["x_angle"] == pytest.approx(far["x_angle"], abs=1.0)
+
+
+# ---------------------------------------------------------------- pose failures
+@pytest.mark.parametrize(
+    "landmarks",
+    [
+        np.zeros((6, 2)),
+        np.full((6, 2), 300.0),
+        np.full((6, 2), np.nan),
+        np.array([[i * 50.0, 100.0] for i in range(6)]),
+    ],
+    ids=["all-zero", "all-identical", "nan", "collinear"],
+)
+def test_degenerate_landmarks_have_no_pose(landmarks):
+    assert solve(landmarks) is None
+
+
+def test_landmarks_in_the_wrong_order_have_no_pose():
+    assert solve(project_head(10, -20)[[3, 2, 1, 0, 5, 4]]) is None
+
+
+def test_realistic_noisy_landmarks_are_never_rejected():
+    rng = np.random.default_rng(7)
+    for _ in range(300):
+        pitch, yaw, roll = rng.uniform(-35, 35), rng.uniform(-50, 50), rng.uniform(-25, 25)
+        landmarks = np.trunc(project_head(pitch, yaw, roll, rng.uniform(400, 4000)) + rng.normal(0, 1.5, (6, 2)))
+        assert solve(landmarks) is not None
+
+
+def test_valid_pose_marks_the_eye_axes_valid():
+    assert solve(project_head(0, -10))["eye_axes_valid"] is True
+
+
+def test_projection_data_is_skipped_when_the_eye_axes_are_invalid():
+    cam_matrix, dist_coeffs = build_camera_and_distortion(WIDTH, HEIGHT)
+    pose = solve(project_head(0, -10))
+    gaze_scores = {"lx": 0.5, "ly": 0.5, "rx": 0.5, "ry": 0.5}
+    assert build_projection_data(pose, cam_matrix, dist_coeffs, gaze_scores, 100, 100) is not None
+
+    pose["eye_axes_valid"] = False
+    assert build_projection_data(pose, cam_matrix, dist_coeffs, gaze_scores, 100, 100) is None
+
+
+def test_overlay_draws_nothing_without_projection_data():
+    image = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+    draw_pose_overlay(image, project_head(0, 0), None, True, True, True)
+    assert not image.any()
