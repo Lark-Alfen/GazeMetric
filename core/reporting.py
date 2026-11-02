@@ -37,7 +37,7 @@ def print_interrupted_banner():
     print(LINE + "\n")
 
 
-def print_summary(statements, engagement_states):
+def print_summary(statements, engagement_states, frames_with_faces=None):
     print("\n" + LINE)
     print("                    HEAD POSITION ANALYSIS")
     print(LINE)
@@ -47,7 +47,9 @@ def print_summary(statements, engagement_states):
         for position, count in Counter(statements).most_common():
             percentage = (count / len(statements)) * 100
             print(f"  {position:20s}: {percentage:6.2f}%")
-        print(f"\nTotal frames analyzed: {len(statements)}")
+        print(f"\nFace observations analyzed: {len(statements)}")
+        if frames_with_faces is not None:
+            print(f"Frames with at least one face: {frames_with_faces}")
     else:
         print("\n  No head position data collected")
 
@@ -60,7 +62,9 @@ def print_summary(statements, engagement_states):
         for engagement, count in Counter(engagement_states).most_common():
             percentage = (count / len(engagement_states)) * 100
             print(f"  {engagement:20s}: {percentage:6.2f}%")
-        print(f"\nTotal frames analyzed: {len(engagement_states)}")
+        print(f"\nFace observations analyzed: {len(engagement_states)}")
+        if frames_with_faces is not None:
+            print(f"Frames with at least one face: {frames_with_faces}")
     else:
         print("\n  No engagement data collected")
 

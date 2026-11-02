@@ -144,6 +144,7 @@ def main(args):
 
     statements = []
     engagement_states = []
+    frames_with_faces = 0
     timeline_writer = None
     engagement_score_values = []
     face_tracker = FaceTracker(SCORE_SMOOTHING_WINDOW)
@@ -423,6 +424,8 @@ def main(args):
                             ),
                         )
 
+                if frame_has_record:
+                    frames_with_faces += 1
                 if not frame_has_record:
                     timeline_writer.write(
                         create_no_face_timeline_record(
@@ -466,7 +469,7 @@ def main(args):
         if timeline_writer is not None:
             timeline_writer.close()
         if session_started:
-            print_summary(statements, engagement_states)
+            print_summary(statements, engagement_states, frames_with_faces)
             print_score_summary(engagement_score_values)
             try:
                 timeline_records = read_timeline_csv(timeline_writer.csv_path)
