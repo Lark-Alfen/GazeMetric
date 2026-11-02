@@ -89,8 +89,10 @@ def _extract_face_roi(gray_frame, face_bbox):
 
 def _compute_lighting_score(frame, face_bbox):
     warnings = []
-    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    face_roi = _extract_face_roi(gray_frame, face_bbox)
+    # crop first and convert only the face, not the whole frame
+    face_roi = _extract_face_roi(frame, face_bbox)
+    if face_roi.ndim == 3:
+        face_roi = cv2.cvtColor(face_roi, cv2.COLOR_BGR2GRAY)
 
     mean_brightness = float(np.mean(face_roi))
     contrast = float(np.std(face_roi))
