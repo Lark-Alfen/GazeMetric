@@ -8,6 +8,8 @@ import sys
 import time
 import traceback
 
+from core.cli import add_common_arguments, validate_common_arguments
+
 ############## PARAMETERS #######################################################
 
 # Set these values to show/hide certain vectors of the estimation
@@ -44,34 +46,7 @@ def parse_arguments():
         default=None,
         help="Path to input video file (required when --source video).",
     )
-    parser.add_argument(
-        "--output-video",
-        dest="output_video_path",
-        default=None,
-        help="Optional path to save annotated output video.",
-    )
-    parser.add_argument(
-        "--timeline-dir",
-        dest="timeline_dir",
-        default=None,
-        help="Base directory for timeline/report artifacts; each run creates a unique session_<timestamp> folder (default base: runs).",
-    )
-    parser.add_argument(
-        "--skip-calibration",
-        action="store_true",
-        help="Skip baseline calibration and use default thresholds.",
-    )
-    parser.add_argument(
-        "--calibration-seconds",
-        type=float,
-        default=10.0,
-        help="Baseline calibration duration in seconds (default: 10).",
-    )
-    parser.add_argument(
-        "--calibration-profile",
-        default=None,
-        help="Optional JSON path to load/save calibration profile.",
-    )
+    add_common_arguments(parser)
 
     args = parser.parse_args()
 
@@ -81,8 +56,7 @@ def parse_arguments():
         if not os.path.exists(args.input_path):
             parser.error(f"Input video file not found: {args.input_path}")
 
-    if args.calibration_seconds <= 0:
-        parser.error("--calibration-seconds must be greater than 0.")
+    validate_common_arguments(parser, args)
 
     return args
 
