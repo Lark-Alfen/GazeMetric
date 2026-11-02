@@ -131,6 +131,7 @@ class MainRun:
             skip_calibration=True,
             calibration_seconds=1.0,
             calibration_profile=None,
+            no_display=False,
         )
         values.update(overrides)
         return argparse.Namespace(**values)

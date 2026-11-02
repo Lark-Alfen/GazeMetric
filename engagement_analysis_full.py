@@ -27,7 +27,15 @@ threshold = .3
 #################################################################################
 
 SCORE_SMOOTHING_WINDOW = 15
+PROGRESS_EVERY_FRAMES = 100
 MAX_CONSECUTIVE_FRAME_ERRORS = 30
+
+
+def format_progress(frames_done, total_frames):
+    """Progress line for --no-display; the total is only known for recorded video."""
+    if total_frames and total_frames > 0:
+        return f"Processed {frames_done}/{total_frames} frames ({100.0 * frames_done / total_frames:.0f}%)"
+    return f"Processed {frames_done} frames"
 
 
 def parse_arguments():
@@ -149,6 +157,7 @@ def main(args):
             print(f"Unable to open source: {source}")
             return 1
 
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) if args.source == "video" else 0
         source_fps = cap.get(cv2.CAP_PROP_FPS)
         if source_fps <= 0:
             source_fps = 20.0
@@ -164,7 +173,7 @@ def main(args):
 
         leye_3d, reye_3d = build_eye_reference_points()
 
-        print_startup_banner(args.source)
+        print_startup_banner(args.source, show_window=not args.no_display)
 
         calibration_profile = get_default_calibration_profile()
         try:
@@ -197,6 +206,7 @@ def main(args):
                 build_camera_and_distortion=build_camera_and_distortion,
                 solve_pose_vectors=solve_pose_vectors,
                 build_calibration_profile=build_calibration_profile,
+                show_window=not args.no_display,
             )
             if calibration_status == CALIBRATION_QUIT:
                 return 0
@@ -411,12 +421,16 @@ def main(args):
                 if output_writer is not None:
                     output_writer.write(frame)
 
-                cv2.imshow(WINDOW_NAME, frame)
+                if args.no_display:
+                    if frame_index % PROGRESS_EVERY_FRAMES == 0:
+                        print(format_progress(frame_index, total_frames))
+                else:
+                    cv2.imshow(WINDOW_NAME, frame)
 
-                key = cv2.waitKey(5) & 0xFF
-                if key == ord("q") or key == ord("Q") or window_was_closed():
-                    print_stopping_banner()
-                    break
+                    key = cv2.waitKey(5) & 0xFF
+                    if key == ord("q") or key == ord("Q") or window_was_closed():
+                        print_stopping_banner()
+                        break
             except Exception as exc:
                 failed_frames += 1
                 consecutive_failures += 1
@@ -472,7 +486,8 @@ def main(args):
             if output_writer is not None and output_writer.close():
                 print(f"Saved annotated video to: {args.output_video_path}")
         finally:
-            cv2.destroyAllWindows()
+            if not args.no_display:
+                cv2.destroyAllWindows()
             face_mesh.close()
 
     return exit_code

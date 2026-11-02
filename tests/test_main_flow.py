@@ -245,3 +245,63 @@ def test_each_face_smooths_its_own_score(main_run, video):
     # constant input per person gives a constant smoothed score; shared state would drift between the two values
     for values in scores.values():
         assert max(values[3:]) - min(values[3:]) < 0.5
+
+
+# ---------------------------------------------------------------- --no-display
+@pytest.fixture
+def window_calls(main_run):
+    calls = []
+    for name in ("imshow", "waitKey", "destroyAllWindows", "getWindowProperty"):
+        main_run.monkeypatch.setattr(f"cv2.{name}", lambda *a, _n=name, **k: calls.append(_n) or 1)
+    return calls
+
+
+def test_no_display_never_touches_the_window_and_still_writes_everything(main_run, video, window_calls):
+    assert main_run.run(main_run.args(video, no_display=True)) == 0
+    assert window_calls == []
+    assert len(main_run.timeline_rows()) == 40
+    assert "Saved session summary JSON" in main_run.output
+
+
+def test_with_a_display_the_window_is_used(main_run, video, window_calls):
+    assert main_run.run(main_run.args(video)) == 0
+    assert window_calls.count("imshow") == 40
+    assert "destroyAllWindows" in window_calls
+
+
+def test_no_display_prints_progress_with_the_total_for_a_video(main_run, tmp_path):
+    from tests.conftest import make_video
+
+    clip = make_video(tmp_path / "long.mp4", frames=250)
+    assert main_run.run(main_run.args(clip, no_display=True)) == 0
+    assert "Processed 100/250 frames (40%)" in main_run.output
+    assert "Processed 200/250 frames (80%)" in main_run.output
+    assert "Processed 250/250" not in main_run.output  # only every 100 frames
+
+
+def test_no_display_banner_has_no_window_controls(main_run, video):
+    assert main_run.run(main_run.args(video, no_display=True)) == 0
+    assert "video window" not in main_run.output
+    assert "Ctrl+C" in main_run.output
+
+
+def test_no_display_calibration_runs_without_a_window(main_run, video, window_calls):
+    assert main_run.run(main_run.args(video, no_display=True, skip_calibration=False, calibration_seconds=1.0)) == 0
+    assert window_calls == []
+    assert "Calibration step started" in main_run.output
+    assert main_run.timeline_rows() and len(main_run.timeline_rows()) == 40
+
+
+@pytest.mark.parametrize(
+    "done, total, text",
+    [
+        (100, 9000, "Processed 100/9000 frames (1%)"),
+        (9000, 9000, "Processed 9000/9000 frames (100%)"),
+        (300, 0, "Processed 300 frames"),
+        (300, -1, "Processed 300 frames"),
+    ],
+)
+def test_progress_line(done, total, text):
+    from engagement_analysis_full import format_progress
+
+    assert format_progress(done, total) == text
