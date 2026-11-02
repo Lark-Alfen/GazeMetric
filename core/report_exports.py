@@ -53,6 +53,41 @@ def _extract_warning_counts(face_records):
     return warning_counter
 
 
+def _score_stats(values):
+    return {
+        "average": round(_safe_mean(values), 2) if values else None,
+        "min": round(min(values), 2) if values else None,
+        "max": round(max(values), 2) if values else None,
+        "samples": len(values),
+    }
+
+
+def _numeric_values(records, key):
+    values = [_to_float(record.get(key)) for record in records]
+    return [value for value in values if value is not None]
+
+
+def _group_by_face(face_records):
+    """Records per face_index, ordered by face."""
+    groups = {}
+    for record in face_records:
+        groups.setdefault(int(record["face_index"]), []).append(record)
+    return dict(sorted(groups.items()))
+
+
+def _build_per_face_kpis(face_records):
+    per_face = {}
+    for face_index, records in _group_by_face(face_records).items():
+        per_face[str(face_index)] = {
+            "records": len(records),
+            "frames": len({record.get("frame_index") for record in records}),
+            "engagement_score": _score_stats(_numeric_values(records, "engagement_score_smooth")),
+            "quality_confidence": _score_stats(_numeric_values(records, "quality_confidence_score")),
+            "engagement_label": _distribution_from_values(record.get("engagement_label") for record in records),
+        }
+    return per_face
+
+
 def build_summary_payload(timeline_records, source_type, input_path=None, output_video_path=None):
     frame_ids = [record.get("frame_index") for record in timeline_records if record.get("frame_index") is not None]
     total_frames = len(set(frame_ids))
@@ -64,11 +99,8 @@ def build_summary_payload(timeline_records, source_type, input_path=None, output
     face_records = [record for record in timeline_records if int(record.get("face_index", -1)) >= 0]
     no_face_records = [record for record in timeline_records if int(record.get("face_index", -1)) < 0]
 
-    engagement_scores = [_to_float(record.get("engagement_score_smooth")) for record in face_records]
-    engagement_scores = [value for value in engagement_scores if value is not None]
-
-    quality_scores = [_to_float(record.get("quality_confidence_score")) for record in face_records]
-    quality_scores = [value for value in quality_scores if value is not None]
+    engagement_scores = _numeric_values(face_records, "engagement_score_smooth")
+    quality_scores = _numeric_values(face_records, "quality_confidence_score")
 
     warning_counter = _extract_warning_counts(face_records)
 
@@ -83,22 +115,15 @@ def build_summary_payload(timeline_records, source_type, input_path=None, output
             "total_frames": total_frames,
             "duration_seconds": round(duration_seconds, 3),
             "face_records": len(face_records),
+            "frames_with_face": len({record.get("frame_index") for record in face_records}),
+            "faces_seen": len({int(record["face_index"]) for record in face_records}),
             "no_face_records": len(no_face_records),
             "pose_unavailable_records": sum(
                 1 for record in face_records if record.get("engagement_label") == POSE_UNAVAILABLE_LABEL
             ),
-            "engagement_score": {
-                "average": round(_safe_mean(engagement_scores), 2) if engagement_scores else None,
-                "min": round(min(engagement_scores), 2) if engagement_scores else None,
-                "max": round(max(engagement_scores), 2) if engagement_scores else None,
-                "samples": len(engagement_scores),
-            },
-            "quality_confidence": {
-                "average": round(_safe_mean(quality_scores), 2) if quality_scores else None,
-                "min": round(min(quality_scores), 2) if quality_scores else None,
-                "max": round(max(quality_scores), 2) if quality_scores else None,
-                "samples": len(quality_scores),
-            },
+            "engagement_score": _score_stats(engagement_scores),
+            "quality_confidence": _score_stats(quality_scores),
+            "per_face": _build_per_face_kpis(face_records),
             "warning_records": sum(1 for record in face_records if str(record.get("quality_warnings", "")).strip() != ""),
         },
         "distributions": {
@@ -155,20 +180,26 @@ def create_summary_pdf(summary_payload, timeline_records, pdf_path):
     import matplotlib.pyplot as plt
 
     face_records = [record for record in timeline_records if int(record.get("face_index", -1)) >= 0]
-    engagement_series = _build_time_series(face_records, "engagement_score_smooth")
-    quality_series = _build_time_series(face_records, "quality_confidence_score")
+    faces = _group_by_face(face_records)
+    engagement_series = {face: _build_time_series(records, "engagement_score_smooth") for face, records in faces.items()}
+    quality_series = {face: _build_time_series(records, "quality_confidence_score") for face, records in faces.items()}
+    colours = ["#2a9d8f", "#e76f51", "#457b9d", "#e9c46a", "#6d597a", "#8ab17d"]
 
     figure, axes = plt.subplots(2, 2, figsize=(14, 9))
     figure.suptitle("EngageVision Session Summary", fontsize=16, fontweight="bold")
 
     score_ax = axes[0][0]
-    if engagement_series:
-        score_ax.plot(
-            [item[0] for item in engagement_series],
-            [item[1] for item in engagement_series],
-            color="#2a9d8f",
-            linewidth=1.8,
-        )
+    if any(engagement_series.values()):
+        for position, (face, series) in enumerate(engagement_series.items()):
+            score_ax.plot(
+                [item[0] for item in series],
+                [item[1] for item in series],
+                color=colours[position % len(colours)],
+                linewidth=1.8,
+                label=f"Face {face}",
+            )
+        if len(engagement_series) > 1:
+            score_ax.legend(loc="lower right", fontsize=8)
     else:
         score_ax.text(0.5, 0.5, "No score data", ha="center", va="center")
     score_ax.set_title("Engagement Score Over Time")
@@ -178,13 +209,17 @@ def create_summary_pdf(summary_payload, timeline_records, pdf_path):
     score_ax.grid(alpha=0.25)
 
     quality_ax = axes[0][1]
-    if quality_series:
-        quality_ax.plot(
-            [item[0] for item in quality_series],
-            [item[1] for item in quality_series],
-            color="#457b9d",
-            linewidth=1.8,
-        )
+    if any(quality_series.values()):
+        for position, (face, series) in enumerate(quality_series.items()):
+            quality_ax.plot(
+                [item[0] for item in series],
+                [item[1] for item in series],
+                color=colours[position % len(colours)],
+                linewidth=1.8,
+                label=f"Face {face}",
+            )
+        if len(quality_series) > 1:
+            quality_ax.legend(loc="lower right", fontsize=8)
     else:
         quality_ax.text(0.5, 0.5, "No quality data", ha="center", va="center")
     quality_ax.set_title("Quality Confidence Over Time")
@@ -210,7 +245,10 @@ def create_summary_pdf(summary_payload, timeline_records, pdf_path):
     score_stats = kpis["engagement_score"]
     quality_stats = kpis["quality_confidence"]
     footer_lines = [
-        f"Frames: {kpis['total_frames']} | Duration: {kpis['duration_seconds']:.2f}s | Face records: {kpis['face_records']}",
+        (
+            f"Frames: {kpis['total_frames']} | Duration: {kpis['duration_seconds']:.2f}s | "
+            f"Faces: {kpis['faces_seen']} | Face records: {kpis['face_records']}"
+        ),
         (
             "Engagement score avg/min/max: "
             f"{score_stats['average']} / {score_stats['min']} / {score_stats['max']}"
