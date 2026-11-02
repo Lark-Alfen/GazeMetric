@@ -27,9 +27,9 @@ def make_video(path, frames=40):
     return str(path)
 
 
-def fake_landmarks():
+def fake_landmarks(shift_x=0.0, yaw=-10):
     """478 normalized landmarks whose six head landmarks form a plausible, slightly turned face."""
-    head = project_head(5, -10)  # pixels in a 1280x720 frame
+    head = project_head(5, yaw)  # pixels in a 1280x720 frame
     points = np.full((478, 2), 0.5)
     for index, row in zip((1, 199, 33, 263, 61, 291), head):
         points[index] = (row[0] / 1280.0, row[1] / 720.0)
@@ -48,18 +48,25 @@ def fake_landmarks():
         points[corner_out] = (left, 0.45)
     points[159], points[145] = (0.40, 0.43), (0.40, 0.47)
     points[386], points[374] = (0.58, 0.43), (0.58, 0.47)
+    points[:, 0] += shift_x
     return SimpleNamespace(landmark=[SimpleNamespace(x=float(x), y=float(y), z=0.0) for x, y in points])
 
 
 class FakeFaceMesh:
     instances = []
     faces = 1
+    people = None  # optional [(shift_x, yaw), ...]; the detection order flips on every other frame
+    calls = 0
 
     def __init__(self, **_kwargs):
         self.closed = False
         FakeFaceMesh.instances.append(self)
 
     def process(self, _frame):
+        if FakeFaceMesh.people:
+            FakeFaceMesh.calls += 1
+            people = FakeFaceMesh.people if FakeFaceMesh.calls % 2 else FakeFaceMesh.people[::-1]
+            return SimpleNamespace(multi_face_landmarks=[fake_landmarks(shift, yaw) for shift, yaw in people])
         if not FakeFaceMesh.faces:
             return SimpleNamespace(multi_face_landmarks=None)
         return SimpleNamespace(multi_face_landmarks=[fake_landmarks() for _ in range(FakeFaceMesh.faces)])
@@ -81,6 +88,8 @@ class MainRun:
 
         FakeFaceMesh.instances = []
         FakeFaceMesh.faces = 1
+        FakeFaceMesh.people = None
+        FakeFaceMesh.calls = 0
         monkeypatch.setattr(mp.solutions.face_mesh, "FaceMesh", FakeFaceMesh)
         monkeypatch.setattr(mp.solutions.drawing_utils, "draw_landmarks", lambda **_kwargs: None)
 
