@@ -129,6 +129,7 @@ def main(args):
     statements = []
     engagement_states = []
     frames_with_faces = 0
+    camera_model_size = None
     timeline_writer = None
     engagement_score_values = []
     face_tracker = FaceTracker(SCORE_SMOOTHING_WINDOW)
@@ -262,8 +263,12 @@ def main(args):
                 results = face_mesh.process(rgb_frame)
                 rgb_frame.flags.writeable = True
 
-                frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
+                # the frame is already BGR; it is only drawn on, so no copy or conversion back is needed
+                frame = processing_frame
                 img_h, img_w, _ = frame.shape
+                if (img_w, img_h) != camera_model_size:
+                    cam_matrix, dist_coeffs = build_camera_and_distortion(img_w, img_h)
+                    camera_model_size = (img_w, img_h)
 
                 frame_has_record = False
 
@@ -295,7 +300,6 @@ def main(args):
 
                         track.last_scores = compute_gaze_scores(face_2d, track.last_scores, threshold)
                         last_scores = track.last_scores
-                        cam_matrix, dist_coeffs = build_camera_and_distortion(img_w, img_h)
                         pose_data = solve_pose_vectors(
                             face_2d_head,
                             cam_matrix,
