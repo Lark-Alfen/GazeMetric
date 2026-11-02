@@ -8,7 +8,15 @@ import engagement_analysis_live
 import engagement_analysis_recorded
 from core.cli import add_common_arguments, validate_common_arguments
 
-COMMON_DESTS = {"output_video_path", "timeline_dir", "skip_calibration", "calibration_seconds", "calibration_profile", "no_display"}
+COMMON_DESTS = {
+    "output_video_path",
+    "timeline_dir",
+    "skip_calibration",
+    "calibration_seconds",
+    "calibration_profile",
+    "max_faces",
+    "no_display",
+}
 
 
 def parse(module, monkeypatch, *argv):
@@ -33,6 +41,7 @@ def test_common_arguments_and_defaults():
     assert args.skip_calibration is False
     assert args.calibration_seconds == 10.0
     assert args.no_display is False
+    assert args.max_faces == 2
 
 
 def test_common_arguments_accept_every_option():
@@ -128,3 +137,27 @@ def test_the_option_definitions_exist_in_one_place_only():
             text = handle.read()
         for option in ("--output-video", "--timeline-dir", "--skip-calibration", "--calibration-seconds", "--calibration-profile"):
             assert f'"{option}"' not in text, f"{option} is still defined in {path}"
+
+
+# ---------------------------------------------------------------- camera index and face limit
+def test_camera_index_and_max_faces_defaults_and_values(monkeypatch):
+    args = parse(engagement_analysis_live, monkeypatch)
+    assert (args.camera_index, args.max_faces) == (0, 2)
+    args = parse(engagement_analysis_live, monkeypatch, "--camera-index", "1", "--max-faces", "5")
+    assert (args.camera_index, args.max_faces) == (1, 5)
+    args = parse(engagement_analysis_full, monkeypatch, "--camera-index", "2")
+    assert args.camera_index == 2
+
+
+def test_recorded_mode_has_no_camera_option(monkeypatch, clip):
+    with pytest.raises(SystemExit):
+        parse(engagement_analysis_recorded, monkeypatch, "--input", clip, "--camera-index", "1")
+    assert parse(engagement_analysis_recorded, monkeypatch, "--input", clip, "--max-faces", "1").max_faces == 1
+
+
+@pytest.mark.parametrize("flag, value, message", [("--max-faces", "0", "--max-faces"), ("--camera-index", "-1", "--camera-index")])
+def test_invalid_values_are_rejected(monkeypatch, capsys, flag, value, message):
+    with pytest.raises(SystemExit) as exit_info:
+        parse(engagement_analysis_live, monkeypatch, flag, value)
+    assert exit_info.value.code == 2
+    assert message in capsys.readouterr().err

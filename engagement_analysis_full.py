@@ -8,7 +8,7 @@ import sys
 import time
 import traceback
 
-from core.cli import add_common_arguments, validate_common_arguments
+from core.cli import add_camera_arguments, add_common_arguments, validate_common_arguments
 
 ############## PARAMETERS #######################################################
 
@@ -54,6 +54,7 @@ def parse_arguments():
         default=None,
         help="Path to input video file (required when --source video).",
     )
+    add_camera_arguments(parser)
     add_common_arguments(parser)
 
     args = parser.parse_args()
@@ -97,6 +98,7 @@ def main(args):
         save_calibration_profile,
     )
     from core.calibration_runtime import CALIBRATION_QUIT, CALIBRATION_SKIPPED, run_calibration_phase
+    from core.capture import open_capture, open_failure_message
     from core.display import WINDOW_NAME, window_was_closed
     from core.overlay import build_hud_lines, draw_face_hud
     from core.quality import (
@@ -137,7 +139,7 @@ def main(args):
     face_mesh = mp_face_mesh.FaceMesh(
         static_image_mode=False,
         refine_landmarks=True,
-        max_num_faces=2,
+        max_num_faces=args.max_faces,
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5,
     )
@@ -151,10 +153,10 @@ def main(args):
     consecutive_failures = 0
 
     try:
-        source = 0 if args.source == "webcam" else args.input_path
-        cap = cv2.VideoCapture(source)
+        camera_index = args.camera_index if args.source == "webcam" else 0
+        cap = open_capture(args.source, args.input_path, camera_index)
         if not cap.isOpened():
-            print(f"Unable to open source: {source}")
+            print(open_failure_message(args.source, args.input_path, camera_index))
             return 1
 
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) if args.source == "video" else 0
