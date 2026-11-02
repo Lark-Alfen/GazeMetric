@@ -6,7 +6,6 @@ extend-exclude = [
     "runs",
     "Video",
     "Models",
-    "utils.py",  # unused demo code, removed in issue #26
 ]
 
 [tool.ruff.lint]
