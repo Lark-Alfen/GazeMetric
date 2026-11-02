@@ -116,6 +116,7 @@ def main(args):
     )
     from core.calibration_runtime import CALIBRATION_QUIT, CALIBRATION_SKIPPED, run_calibration_phase
     from core.display import WINDOW_NAME, window_was_closed
+    from core.overlay import build_hud_lines, draw_face_hud
     from core.quality import (
         compute_quality_metrics,
     )
@@ -407,86 +408,19 @@ def main(args):
                         )
                         frame_has_record = True
 
-                        score_color = (0, 255, 0)
-                        if engagement_score_smooth < 45:
-                            score_color = (0, 0, 255)
-                        elif engagement_score_smooth < 70:
-                            score_color = (0, 255, 255)
-
-                        cv2.putText(
+                        draw_face_hud(
                             frame,
-                            engagement_text,
-                            (60, 60),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            1,
-                            (0, 255, 0),
-                            2,
-                            cv2.LINE_AA,
-                        )
-                        cv2.putText(
-                            frame,
-                            f"Score: {engagement_score_smooth:6.2f}/100",
-                            (10, 90),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.8,
-                            score_color,
-                            2,
-                            cv2.LINE_AA,
-                        )
-                        quality_score = quality_metrics["confidence_score"]
-                        quality_label = quality_metrics["confidence_label"]
-                        quality_color = (0, 255, 0)
-                        if quality_score < 45:
-                            quality_color = (0, 0, 255)
-                        elif quality_score < 70:
-                            quality_color = (0, 255, 255)
-
-                        cv2.putText(
-                            frame,
-                            f"Quality: {quality_label} ({quality_score:5.1f}/100)",
-                            (10, 120),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.7,
-                            quality_color,
-                            2,
-                            cv2.LINE_AA,
-                        )
-
-                        warning_y = 150
-                        for warning in quality_metrics["warnings"][:2]:
-                            cv2.putText(
-                                frame,
-                                f"Warning: {warning}",
-                                (10, warning_y),
-                                cv2.FONT_HERSHEY_SIMPLEX,
-                                0.6,
-                                (0, 165, 255),
-                                2,
-                                cv2.LINE_AA,
-                            )
-                            warning_y += 25
-
-                        gaze_color = (0, 255, 0) if gaze_direction == "Forward" else (0, 255, 255)
-                        cv2.putText(
-                            frame,
-                            f"Gaze: {gaze_direction}",
-                            (10, warning_y),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.7,
-                            gaze_color,
-                            2,
-                            cv2.LINE_AA,
-                        )
-
-                        cv2.putText(
-                            frame,
-                            head_text,
-                            (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            1,
-                            (0, 255, 0),
-                            2,
-                            cv2.LINE_AA,
+                            face_2d,
+                            build_hud_lines(
+                                face_id=face_index,
+                                engagement_text=engagement_text,
+                                head_text=head_text,
+                                engagement_score=engagement_score_smooth,
+                                quality_label=quality_metrics["confidence_label"],
+                                quality_score=quality_metrics["confidence_score"],
+                                quality_warnings=quality_metrics["warnings"],
+                                gaze_direction=gaze_direction,
+                            ),
                         )
 
                 if not frame_has_record:
