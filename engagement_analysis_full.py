@@ -7,7 +7,6 @@ import os
 import sys
 import time
 import traceback
-from collections import deque
 
 ############## PARAMETERS #######################################################
 
@@ -119,7 +118,6 @@ def main(args):
     from core.display import WINDOW_NAME, window_was_closed
     from core.quality import (
         compute_quality_metrics,
-        get_default_quality_state,
     )
     from core.report_exports import export_session_reports
     from core.reporting import (
@@ -140,15 +138,14 @@ def main(args):
         video_frame_timestamp,
         write_timeline_json,
     )
+    from core.tracking import FaceTracker
     from core.video_output import AnnotatedVideoWriter
 
     statements = []
     engagement_states = []
     timeline_writer = None
     engagement_score_values = []
-    quality_states = {}
-    last_scores = {"lx": 0.0, "ly": 0.0, "rx": 0.0, "ry": 0.0}
-    score_window = deque(maxlen=SCORE_SMOOTHING_WINDOW)
+    face_tracker = FaceTracker(SCORE_SMOOTHING_WINDOW)
     frame_index = 0
     timeline_output_dir = resolve_timeline_output_dir(args.timeline_dir)
 
@@ -282,8 +279,17 @@ def main(args):
 
                 frame_has_record = False
 
-                if results.multi_face_landmarks:
-                    for face_index, face_landmarks in enumerate(results.multi_face_landmarks):
+                detected_faces = results.multi_face_landmarks or []
+                landmark_arrays = [extract_landmark_arrays(face_landmarks, img_w, img_h) for face_landmarks in detected_faces]
+                # called every frame, also without faces, so that tracks of people who left expire
+                face_tracks = face_tracker.match(
+                    frame_index,
+                    [(face_2d[:, 0].mean() / img_w, face_2d[:, 1].mean() / img_h) for face_2d, _ in landmark_arrays],
+                )
+
+                if detected_faces:
+                    for face_landmarks, (face_2d, face_2d_head), track in zip(detected_faces, landmark_arrays, face_tracks):
+                        face_index = track.track_id
                         mp_drawing.draw_landmarks(
                             image=frame,
                             landmark_list=face_landmarks,
@@ -291,21 +297,16 @@ def main(args):
                             landmark_drawing_spec=None,
                         )
 
-                        (
-                            face_2d,
-                            face_2d_head,
-                        ) = extract_landmark_arrays(face_landmarks, img_w, img_h)
-
-                        quality_state = quality_states.setdefault(face_index, get_default_quality_state())
                         quality_metrics = compute_quality_metrics(
                             frame=frame,
                             face_2d=face_2d,
                             img_w=img_w,
                             img_h=img_h,
-                            quality_state=quality_state,
+                            quality_state=track.quality_state,
                         )
 
-                        last_scores = compute_gaze_scores(face_2d, last_scores, threshold)
+                        track.last_scores = compute_gaze_scores(face_2d, track.last_scores, threshold)
+                        last_scores = track.last_scores
                         cam_matrix, dist_coeffs = build_camera_and_distortion(img_w, img_h)
                         pose_data = solve_pose_vectors(
                             face_2d_head,
@@ -376,8 +377,8 @@ def main(args):
                             y_angle=pose_data["y_angle"],
                             calibration_profile=calibration_profile,
                         )
-                        score_window.append(engagement_score_raw)
-                        engagement_score_smooth = round(sum(score_window) / len(score_window), 2)
+                        track.score_window.append(engagement_score_raw)
+                        engagement_score_smooth = round(sum(track.score_window) / len(track.score_window), 2)
                         engagement_score_values.append(engagement_score_smooth)
 
                         engagement_states.append(engagement_text)

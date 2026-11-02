@@ -217,3 +217,31 @@ def test_ctrl_c_still_prints_the_summary_and_writes_the_reports(main_run, video)
     assert "ENGAGEMENT LEVEL ANALYSIS" in main_run.output
     assert "Saved session summary JSON" in main_run.output
     assert len(main_run.timeline_rows()) == 10
+
+
+def test_two_faces_keep_their_identity_when_the_detection_order_flips(main_run, video):
+    FakeFaceMesh.people = [(-0.25, -25), (0.25, 25)]  # one person turned left on the left, one turned right on the right
+
+    assert main_run.run(main_run.args(video)) == 0
+
+    rows = main_run.timeline_rows()
+    assert len(rows) == 80
+    by_face = {}
+    for row in rows:
+        by_face.setdefault(row["face_index"], []).append(float(row["y_angle"]))
+    assert sorted(by_face) == ["0", "1"]
+    for angles in by_face.values():
+        assert len(angles) == 40
+        assert max(angles) - min(angles) < 1.0  # a mix-up would alternate between the two people's angles
+    assert abs(by_face["0"][0] - by_face["1"][0]) > 20
+
+
+def test_each_face_smooths_its_own_score(main_run, video):
+    FakeFaceMesh.people = [(-0.25, -25), (0.25, 25)]
+    assert main_run.run(main_run.args(video)) == 0
+    scores = {}
+    for row in main_run.timeline_rows():
+        scores.setdefault(row["face_index"], []).append(float(row["engagement_score_smooth"]))
+    # constant input per person gives a constant smoothed score; shared state would drift between the two values
+    for values in scores.values():
+        assert max(values[3:]) - min(values[3:]) < 0.5
