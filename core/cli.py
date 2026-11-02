@@ -31,12 +31,31 @@ def add_common_arguments(parser):
         help="Optional JSON path to load/save calibration profile.",
     )
     parser.add_argument(
+        "--max-faces",
+        type=int,
+        default=2,
+        help="Maximum number of faces to track at the same time (default: 2).",
+    )
+    parser.add_argument(
         "--no-display",
         action="store_true",
         help="Do not open a preview window (for batch runs and machines without a display). Prints progress instead.",
     )
 
 
+def add_camera_arguments(parser):
+    parser.add_argument(
+        "--camera-index",
+        type=int,
+        default=0,
+        help="Which webcam to use, 0 is the first one (default: 0).",
+    )
+
+
 def validate_common_arguments(parser, args):
     if args.calibration_seconds <= 0:
         parser.error("--calibration-seconds must be greater than 0.")
+    if args.max_faces < 1:
+        parser.error("--max-faces must be at least 1.")
+    if getattr(args, "camera_index", 0) < 0:
+        parser.error("--camera-index must be 0 or greater.")

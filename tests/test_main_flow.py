@@ -24,7 +24,7 @@ def test_a_run_without_faces_still_exits_zero(main_run, video):
 
 def test_unopenable_source_exits_nonzero_and_closes_the_face_mesh(main_run, tmp_path):
     assert main_run.run(main_run.args(str(tmp_path / "missing.mp4"))) == 1
-    assert "Unable to open source" in main_run.output
+    assert "Unable to open video file" in main_run.output
     assert main_run.face_mesh.closed
     assert main_run.captures[0].released
     assert main_run.session_dir() is None  # nothing was analysed, so no empty report
@@ -305,3 +305,42 @@ def test_progress_line(done, total, text):
     from engagement_analysis_full import format_progress
 
     assert format_progress(done, total) == text
+
+
+# ---------------------------------------------------------------- camera options
+def test_max_faces_reaches_the_face_tracker(main_run, video):
+    seen = {}
+    real_init = FakeFaceMesh.__init__
+
+    def spy(self, **kwargs):
+        seen.update(kwargs)
+        real_init(self, **kwargs)
+
+    main_run.monkeypatch.setattr(FakeFaceMesh, "__init__", spy)
+    assert main_run.run(main_run.args(video, max_faces=4)) == 0
+    assert seen["max_num_faces"] == 4
+
+
+def test_the_chosen_camera_is_opened_and_a_missing_one_gives_a_helpful_error(main_run):
+    import cv2
+
+    opened = []
+
+    class NoCamera:
+        def __init__(self, *args):
+            opened.append(args)
+
+        def isOpened(self):
+            return False
+
+        def release(self):
+            pass
+
+    main_run.monkeypatch.setattr(cv2, "VideoCapture", NoCamera)
+    args = main_run.args(None, source="webcam", camera_index=7)
+
+    assert main_run.run(args) == 1
+    assert opened[0][0] == 7
+    assert "Unable to open camera 7" in main_run.output
+    assert "--camera-index" in main_run.output
+    assert main_run.face_mesh.closed

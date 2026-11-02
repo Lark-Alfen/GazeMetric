@@ -132,6 +132,8 @@ class MainRun:
             calibration_seconds=1.0,
             calibration_profile=None,
             no_display=False,
+            camera_index=0,
+            max_faces=2,
         )
         values.update(overrides)
         return argparse.Namespace(**values)
