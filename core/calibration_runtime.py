@@ -48,6 +48,7 @@ def run_calibration_phase(
     build_camera_and_distortion,
     solve_pose_vectors,
     build_calibration_profile,
+    show_window=True,
 ):
     calibration_samples = []
     calibration_scores = {"lx": 0.0, "ly": 0.0, "rx": 0.0, "ry": 0.0}
@@ -151,16 +152,18 @@ def run_calibration_phase(
             cv2.LINE_AA,
         )
 
-        cv2.imshow(WINDOW_NAME, frame)
-
-        key = cv2.waitKey(5) & 0xFF
+        if show_window:
+            cv2.imshow(WINDOW_NAME, frame)
+            key = cv2.waitKey(5) & 0xFF
+        else:
+            key = -1
         if key == ord("s") or key == ord("S"):
             print("Calibration skipped by user input.")
             return None, CALIBRATION_SKIPPED
         if key == ord("q") or key == ord("Q"):
             print("Stopping before analysis.")
             return None, CALIBRATION_QUIT
-        if window_was_closed():
+        if show_window and window_was_closed():
             print("Window closed. Stopping before analysis.")
             return None, CALIBRATION_QUIT
 

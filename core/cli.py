@@ -30,6 +30,11 @@ def add_common_arguments(parser):
         default=None,
         help="Optional JSON path to load/save calibration profile.",
     )
+    parser.add_argument(
+        "--no-display",
+        action="store_true",
+        help="Do not open a preview window (for batch runs and machines without a display). Prints progress instead.",
+    )
 
 
 def validate_common_arguments(parser, args):

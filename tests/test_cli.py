@@ -8,7 +8,7 @@ import engagement_analysis_live
 import engagement_analysis_recorded
 from core.cli import add_common_arguments, validate_common_arguments
 
-COMMON_DESTS = {"output_video_path", "timeline_dir", "skip_calibration", "calibration_seconds", "calibration_profile"}
+COMMON_DESTS = {"output_video_path", "timeline_dir", "skip_calibration", "calibration_seconds", "calibration_profile", "no_display"}
 
 
 def parse(module, monkeypatch, *argv):
@@ -32,6 +32,7 @@ def test_common_arguments_and_defaults():
     assert args.output_video_path is None and args.timeline_dir is None and args.calibration_profile is None
     assert args.skip_calibration is False
     assert args.calibration_seconds == 10.0
+    assert args.no_display is False
 
 
 def test_common_arguments_accept_every_option():
@@ -80,6 +81,15 @@ def test_every_entry_point_rejects_zero_calibration_seconds(module, monkeypatch,
     with pytest.raises(SystemExit) as exit_info:
         parse(module, monkeypatch, *argv, "--calibration-seconds", "0")
     assert exit_info.value.code == 2
+
+
+@pytest.mark.parametrize("module", [engagement_analysis_full, engagement_analysis_live, engagement_analysis_recorded])
+def test_no_display_flag_is_available_everywhere(module, monkeypatch, clip):
+    argv = ["--input", clip] if module is not engagement_analysis_live else []
+    if module is engagement_analysis_full:
+        argv += ["--source", "video"]
+    assert parse(module, monkeypatch, *argv).no_display is False
+    assert parse(module, monkeypatch, *argv, "--no-display").no_display is True
 
 
 def test_live_mode_is_a_webcam_without_an_input_file(monkeypatch):
