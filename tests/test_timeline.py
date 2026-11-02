@@ -1,5 +1,10 @@
+import csv
 import json
+import os
 
+import pytest
+
+from core import timeline
 from core.report_exports import build_summary_payload
 from core.timeline import (
     TIMELINE_FIELDNAMES,
@@ -9,6 +14,7 @@ from core.timeline import (
     create_pose_failed_timeline_record,
     export_timeline_records,
     read_timeline_csv,
+    resolve_timeline_output_dir,
     video_frame_timestamp,
     write_timeline_json,
 )
@@ -216,3 +222,153 @@ def test_summary_from_the_re_read_csv_equals_the_summary_from_memory(tmp_path):
     from_memory.pop("generated_at")
     from_csv.pop("generated_at")
     assert from_csv == from_memory
+
+
+# ---------------------------------------------------------------- session folder resolution
+class FrozenDatetime:
+    @staticmethod
+    def now():
+        from datetime import datetime
+
+        return datetime(2026, 3, 4, 5, 6, 7)
+
+
+@pytest.fixture
+def frozen_clock(monkeypatch, tmp_path):
+    monkeypatch.setattr(timeline, "datetime", FrozenDatetime)
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
+def test_default_folder_is_runs_session_timestamp(frozen_clock):
+    assert resolve_timeline_output_dir(None) == os.path.join("runs", "session_20260304_050607")
+    assert resolve_timeline_output_dir("") == os.path.join("runs", "session_20260304_050607")
+
+
+def test_a_base_directory_gets_a_session_folder_inside_it(frozen_clock):
+    assert resolve_timeline_output_dir("results") == os.path.join("results", "session_20260304_050607")
+    assert resolve_timeline_output_dir("results/") == os.path.join("results", "session_20260304_050607")
+
+
+def test_an_explicit_session_path_is_kept_as_given(frozen_clock):
+    assert resolve_timeline_output_dir(os.path.join("out", "session_mine")) == os.path.join("out", "session_mine")
+
+
+def test_an_existing_explicit_session_folder_gets_a_numeric_suffix(frozen_clock):
+    path = os.path.join("out", "session_mine")
+    os.makedirs(path)
+    assert resolve_timeline_output_dir(path) == path + "_01"
+    os.makedirs(path + "_01")
+    assert resolve_timeline_output_dir(path) == path + "_02"
+
+
+def test_two_runs_in_the_same_second_do_not_share_a_folder(frozen_clock):
+    first = resolve_timeline_output_dir("results")
+    os.makedirs(first)
+    second = resolve_timeline_output_dir("results")
+    assert second == first + "_01"
+
+
+def test_resolving_a_folder_does_not_create_it(frozen_clock):
+    resolve_timeline_output_dir("results")
+    assert not os.path.exists("results")
+
+
+# ---------------------------------------------------------------- record builders
+def build_face_record(**overrides):
+    values = dict(
+        frame_index=3,
+        timestamp_seconds=0.123,
+        face_index=0,
+        x_angle=1.234567,
+        y_angle=-2.345678,
+        gaze_direction="Forward",
+        engagement_label="Engaged",
+        head_direction="Looking Straight",
+        head_pose_score=88.123456,
+        gaze_center_score=77.987654,
+        engagement_score_raw=66.666666,
+        engagement_score_smooth=55.55,
+    )
+    values.update(overrides)
+    return create_face_timeline_record(**values)
+
+
+def test_face_record_rounds_numbers_and_keeps_every_column():
+    record = build_face_record(
+        face_visibility_score=0.123456,
+        lighting_score=0.987654,
+        landmark_stability_score=0.555555,
+        quality_confidence_score=71.4567,
+        quality_confidence_label="High",
+    )
+    assert list(record) == TIMELINE_FIELDNAMES
+    assert record["x_angle"] == 1.2346 and record["y_angle"] == -2.3457
+    assert record["head_pose_score"] == 88.1235 and record["gaze_center_score"] == 77.9877
+    assert record["engagement_score_raw"] == 66.67
+    assert record["engagement_score_smooth"] == 55.55
+    assert record["face_visibility_score"] == 0.1235 and record["lighting_score"] == 0.9877
+    assert record["landmark_stability_score"] == 0.5556
+    assert record["quality_confidence_score"] == 71.46
+
+
+def test_face_record_without_quality_data_uses_none_and_unknown():
+    record = build_face_record()
+    for key in ("face_visibility_score", "lighting_score", "landmark_stability_score", "quality_confidence_score"):
+        assert record[key] is None
+    assert record["quality_confidence_label"] == "Unknown"
+    assert record["quality_warnings"] == ""
+
+
+@pytest.mark.parametrize(
+    "warnings, text",
+    [
+        (None, ""),
+        ([], ""),
+        (["Low light"], "Low light"),
+        (["Low light", "", None, "Frequent movement"], "Low light; Frequent movement"),
+        ("Already text", "Already text"),
+    ],
+)
+def test_quality_warnings_are_joined_into_one_cell(warnings, text):
+    assert build_face_record(quality_warnings=warnings)["quality_warnings"] == text
+
+
+def test_face_record_accepts_numpy_numbers():
+    import numpy as np
+
+    record = build_face_record(x_angle=np.float32(2.5), y_angle=np.float64(-1.25), head_pose_score=np.float32(50))
+    assert record["x_angle"] == 2.5 and record["y_angle"] == -1.25 and record["head_pose_score"] == 50.0
+    json.dumps(record)  # must stay serializable for timeline.json
+
+
+def test_no_face_record_matches_the_column_list_and_marks_every_label():
+    record = create_no_face_timeline_record(frame_index=9, timestamp_seconds=0.9)
+    assert list(record) == TIMELINE_FIELDNAMES
+    assert record["face_index"] == -1
+    assert {record[key] for key in ("gaze_direction", "engagement_label", "head_direction", "quality_warnings")} == {"No Face"}
+    assert all(record[key] is None for key in ("x_angle", "y_angle", "head_pose_score", "engagement_score_smooth"))
+
+
+# ---------------------------------------------------------------- export_timeline_records
+def test_export_writes_csv_and_json_with_a_matching_header(tmp_path):
+    records = [face_record(1), create_no_face_timeline_record(2, 0.2)]
+    csv_path, json_path = export_timeline_records(records, str(tmp_path / "deep" / "session"))
+
+    with open(csv_path, newline="", encoding="utf-8") as handle:
+        rows = list(csv.reader(handle))
+    assert rows[0] == TIMELINE_FIELDNAMES
+    assert len(rows) == 3
+    assert rows[2][TIMELINE_FIELDNAMES.index("engagement_label")] == "No Face"
+    assert rows[2][TIMELINE_FIELDNAMES.index("x_angle")] == ""  # None is an empty cell
+
+    with open(json_path, encoding="utf-8") as handle:
+        assert json.load(handle) == records
+
+
+def test_export_of_nothing_still_writes_a_header_and_an_empty_list(tmp_path):
+    csv_path, json_path = export_timeline_records([], str(tmp_path))
+    with open(csv_path, encoding="utf-8") as handle:
+        assert handle.read().strip() == ",".join(TIMELINE_FIELDNAMES)
+    with open(json_path, encoding="utf-8") as handle:
+        assert json.load(handle) == []
