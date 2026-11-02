@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-import core.calibration_runtime
 import core.quality
+import engagement_analysis_full
 from tests.conftest import FakeFaceMesh
 
 
@@ -40,7 +40,7 @@ def test_one_bad_frame_is_skipped_with_a_traceback_and_the_run_continues(main_ru
             raise ValueError("bad frame")
         return real(*args, **kwargs)
 
-    main_run.monkeypatch.setattr(core.quality, "compute_quality_metrics", flaky)
+    main_run.monkeypatch.setattr(engagement_analysis_full, "compute_quality_metrics", flaky)
     assert main_run.run(main_run.args(video)) == 0
     assert "Traceback (most recent call last)" in main_run.output
     assert "ValueError: bad frame" in main_run.output
@@ -52,7 +52,7 @@ def test_a_persistent_failure_stops_the_run_but_still_writes_reports_and_exits_o
     def broken(*_args, **_kwargs):
         raise RuntimeError("quality broke")
 
-    main_run.monkeypatch.setattr(core.quality, "compute_quality_metrics", broken)
+    main_run.monkeypatch.setattr(engagement_analysis_full, "compute_quality_metrics", broken)
     assert main_run.run(main_run.args(video)) == 1
     assert "Traceback (most recent call last)" in main_run.output
     assert "frames in a row failed" in main_run.output
@@ -65,7 +65,7 @@ def test_failure_during_calibration_releases_the_camera_and_exits_one(main_run, 
     def broken(**_kwargs):
         raise RuntimeError("calibration broke")
 
-    main_run.monkeypatch.setattr(core.calibration_runtime, "run_calibration_phase", broken)
+    main_run.monkeypatch.setattr(engagement_analysis_full, "run_calibration_phase", broken)
     assert main_run.run(main_run.args(video, skip_calibration=False)) == 1
     assert "Traceback (most recent call last)" in main_run.output
     assert "calibration broke" in main_run.output
@@ -135,8 +135,6 @@ def test_timeline_json_and_csv_are_both_written_and_agree(main_run, video):
 
 
 def test_timeline_rows_are_on_disk_while_the_run_is_still_going(main_run, video):
-    import core.quality
-
     real = core.quality.compute_quality_metrics
     seen = {}
 
@@ -150,7 +148,7 @@ def test_timeline_rows_are_on_disk_while_the_run_is_still_going(main_run, video)
     from tests.conftest import make_video
 
     make_video(longer, frames=100)
-    main_run.monkeypatch.setattr(core.quality, "compute_quality_metrics", spy)
+    main_run.monkeypatch.setattr(engagement_analysis_full, "compute_quality_metrics", spy)
     assert main_run.run(main_run.args(longer)) == 0
     assert seen["rows"] is not None
     assert len(seen["rows"]) == 60  # 70 frames done, flushed in blocks of 30
