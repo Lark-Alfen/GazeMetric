@@ -243,10 +243,11 @@ def build_eye_reference_points():
 
 
 def extract_landmark_arrays(face_landmarks, img_w, img_h):
+    """Pixel coordinates of the 478 landmarks of one face (a list of landmarks with normalized .x and .y)."""
     # Keep sub-pixel precision: the eye ratios divide by eye widths of only a few tens of pixels, so
     # truncating to whole pixels would add visible jitter. Cast to int only where drawing needs it.
     face_2d = np.asarray(
-        [(lm.x * img_w, lm.y * img_h) for lm in face_landmarks.landmark],
+        [(lm.x * img_w, lm.y * img_h) for lm in face_landmarks],
         dtype=np.float64,
     )
 

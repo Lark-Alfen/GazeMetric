@@ -37,7 +37,8 @@ from core.calibration_runtime import CALIBRATION_QUIT, CALIBRATION_SKIPPED, run_
 from core.capture import open_capture, open_failure_message
 from core.cli import add_camera_arguments, add_common_arguments, validate_common_arguments
 from core.display import WINDOW_NAME, window_was_closed
-from core.overlay import build_hud_lines, draw_face_hud
+from core.face_landmarker import FaceLandmarkDetector, missing_model_message
+from core.overlay import build_hud_lines, draw_face_contours, draw_face_hud
 from core.quality import compute_quality_metrics
 from core.report_exports import export_session_reports
 from core.reporting import (
@@ -125,9 +126,7 @@ def parse_arguments():
 class FaceModels:
     """The MediaPipe objects and the fixed eye model that every frame is analysed with."""
 
-    face_mesh: object
-    mp_face_mesh: object
-    mp_drawing: object
+    detector: object
     leye_3d: object
     reye_3d: object
 
@@ -157,20 +156,10 @@ class SessionState:
     dist_coeffs: object = None
 
 
-def create_face_models(max_faces):
-    # imported here because MediaPipe is slow to load and --help does not need it
-    import mediapipe as mp
-
-    mp_face_mesh = mp.solutions.face_mesh
-    face_mesh = mp_face_mesh.FaceMesh(
-        static_image_mode=False,
-        refine_landmarks=True,
-        max_num_faces=max_faces,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5,
-    )
+def create_face_models(model_path, max_faces):
+    detector = FaceLandmarkDetector(model_path, max_faces=max_faces)
     leye_3d, reye_3d = build_eye_reference_points()
-    return FaceModels(face_mesh, mp_face_mesh, mp.solutions.drawing_utils, leye_3d, reye_3d)
+    return FaceModels(detector, leye_3d, reye_3d)
 
 
 def read_source_properties(cap, args):
@@ -212,9 +201,7 @@ def load_or_run_calibration(args, cap, models, source_fps):
 
     generated_profile, calibration_status = run_calibration_phase(
         cap=cap,
-        face_mesh=models.face_mesh,
-        mp_face_mesh=models.mp_face_mesh,
-        mp_drawing=models.mp_drawing,
+        detector=models.detector,
         source_type=args.source,
         calibration_seconds=args.calibration_seconds,
         source_fps=source_fps,
@@ -230,6 +217,7 @@ def load_or_run_calibration(args, cap, models, source_fps):
     )
     if calibration_status == CALIBRATION_QUIT:
         return None, True
+    models.detector.restart()  # the analysis starts fresh, with its own timestamps
 
     calibration_profile = get_default_calibration_profile()
     if generated_profile is not None:
@@ -266,17 +254,11 @@ def frame_timestamp(state):
     return round(time.perf_counter() - state.session_start_time, 3)
 
 
-def analyse_face(state, frame, face_landmarks, face_2d, face_2d_head, track, timestamp_seconds):
+def analyse_face(state, frame, face_2d, face_2d_head, track, timestamp_seconds):
     """Analyse, record and draw one face; every face writes exactly one timeline record."""
     models = state.models
     face_index = track.track_id
-    mp_drawing = models.mp_drawing
-    mp_drawing.draw_landmarks(
-        image=frame,
-        landmark_list=face_landmarks,
-        connections=models.mp_face_mesh.FACEMESH_CONTOURS,
-        landmark_drawing_spec=None,
-    )
+    draw_face_contours(frame, face_2d, models.detector.contour_connections)
 
     img_h, img_w, _ = frame.shape
     quality_metrics = compute_quality_metrics(
@@ -406,9 +388,7 @@ def process_frame(state, raw_frame):
     processing_frame = cv2.flip(raw_frame, 1) if state.args.source == "webcam" else raw_frame
 
     rgb_frame = cv2.cvtColor(processing_frame, cv2.COLOR_BGR2RGB)
-    rgb_frame.flags.writeable = False
-    results = state.models.face_mesh.process(rgb_frame)
-    rgb_frame.flags.writeable = True
+    detected_faces = state.models.detector.detect(rgb_frame, timestamp_seconds * 1000)
 
     # the frame is already BGR; it is only drawn on, so no copy or conversion back is needed
     frame = processing_frame
@@ -417,7 +397,6 @@ def process_frame(state, raw_frame):
         state.cam_matrix, state.dist_coeffs = build_camera_and_distortion(img_w, img_h)
         state.camera_model_size = (img_w, img_h)
 
-    detected_faces = results.multi_face_landmarks or []
     landmark_arrays = [extract_landmark_arrays(face_landmarks, img_w, img_h) for face_landmarks in detected_faces]
     # called every frame, also without faces, so that tracks of people who left expire
     face_tracks = state.face_tracker.match(
@@ -425,8 +404,8 @@ def process_frame(state, raw_frame):
         [(face_2d[:, 0].mean() / img_w, face_2d[:, 1].mean() / img_h) for face_2d, _ in landmark_arrays],
     )
 
-    for face_landmarks, (face_2d, face_2d_head), track in zip(detected_faces, landmark_arrays, face_tracks):
-        analyse_face(state, frame, face_landmarks, face_2d, face_2d_head, track, timestamp_seconds)
+    for (face_2d, face_2d_head), track in zip(landmark_arrays, face_tracks):
+        analyse_face(state, frame, face_2d, face_2d_head, track, timestamp_seconds)
 
     if detected_faces:
         state.frames_with_faces += 1
@@ -521,13 +500,17 @@ def release_resources(args, cap, output_writer, models):
     finally:
         if not args.no_display:
             cv2.destroyAllWindows()
-        models.face_mesh.close()
+        models.detector.close()
 
 
 def main(args):
     """Run the analysis. Returns the process exit code: 0 on success, 1 if the run failed."""
+    if not os.path.isfile(args.face_model):
+        print(missing_model_message(args.face_model))
+        return 1
+
     timeline_output_dir = resolve_timeline_output_dir(args.timeline_dir)
-    models = create_face_models(args.max_faces)
+    models = create_face_models(args.face_model, args.max_faces)
 
     cap = None
     output_writer = None

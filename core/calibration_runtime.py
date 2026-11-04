@@ -5,6 +5,7 @@ import time
 import cv2
 
 from core.display import WINDOW_NAME, window_was_closed
+from core.overlay import draw_face_contours
 
 # Outcomes of run_calibration_phase
 CALIBRATION_COMPLETED = "completed"
@@ -34,9 +35,7 @@ def get_calibration_plan(source_type, calibration_seconds, source_fps):
 
 def run_calibration_phase(
     cap,
-    face_mesh,
-    mp_face_mesh,
-    mp_drawing,
+    detector,
     source_type,
     calibration_seconds,
     source_fps,
@@ -68,30 +67,26 @@ def run_calibration_phase(
         if not success:
             break
         frames_read += 1
+        now = time.perf_counter()
 
         processing_frame = cv2.flip(raw_frame, 1) if source_type == "webcam" else raw_frame
 
         rgb_frame = cv2.cvtColor(processing_frame, cv2.COLOR_BGR2RGB)
-        rgb_frame.flags.writeable = False
-        results = face_mesh.process(rgb_frame)
-        rgb_frame.flags.writeable = True
+        if frame_limit is None:
+            timestamp_ms = (now - start_time) * 1000
+        else:
+            timestamp_ms = frames_read * 1000 / source_fps
+        detected_faces = detector.detect(rgb_frame, timestamp_ms)
 
         frame = processing_frame
         img_h, img_w, _ = frame.shape
 
-        if results.multi_face_landmarks:
-            face_landmarks = results.multi_face_landmarks[0]
-            mp_drawing.draw_landmarks(
-                image=frame,
-                landmark_list=face_landmarks,
-                connections=mp_face_mesh.FACEMESH_CONTOURS,
-                landmark_drawing_spec=None,
-            )
-
+        if detected_faces:
             (
                 face_2d,
                 face_2d_head,
-            ) = extract_landmark_arrays(face_landmarks, img_w, img_h)
+            ) = extract_landmark_arrays(detected_faces[0], img_w, img_h)
+            draw_face_contours(frame, face_2d, detector.contour_connections)
 
             calibration_scores = compute_gaze_scores(face_2d, calibration_scores, threshold)
             if (img_w, img_h) != camera_model_size:
@@ -117,7 +112,7 @@ def run_calibration_phase(
                 )
 
         if frame_limit is None:
-            elapsed = time.perf_counter() - start_time
+            elapsed = now - start_time
             remaining = max(0.0, calibration_seconds - elapsed)
             finished = elapsed >= calibration_seconds
         else:

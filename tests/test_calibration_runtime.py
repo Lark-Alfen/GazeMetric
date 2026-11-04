@@ -1,4 +1,3 @@
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -62,18 +61,16 @@ class FakeCapture:
         return True, np.zeros((48, 64, 3), dtype=np.uint8)
 
 
-class FakeFaceMesh:
+class FakeDetector:
+    contour_connections = []
+
     def __init__(self, face_present):
         self.face_present = face_present
+        self.timestamps = []
 
-    def process(self, _frame):
-        return SimpleNamespace(multi_face_landmarks=[object()] if self.face_present else None)
-
-
-class FakeDrawing:
-    @staticmethod
-    def draw_landmarks(**_kwargs):
-        pass
+    def detect(self, _frame, timestamp_ms):
+        self.timestamps.append(timestamp_ms)
+        return [[object()]] if self.face_present else []
 
 
 def run(frames, face_present, source_type="video", seconds=1.0, fps=25.0, build_profile=None):
@@ -87,11 +84,10 @@ def run(frames, face_present, source_type="video", seconds=1.0, fps=25.0, build_
         return profile
 
     cap = FakeCapture(frames)
+    detector = FakeDetector(face_present)
     result = run_calibration_phase(
         cap=cap,
-        face_mesh=FakeFaceMesh(face_present),
-        mp_face_mesh=SimpleNamespace(FACEMESH_CONTOURS=None),
-        mp_drawing=FakeDrawing,
+        detector=detector,
         source_type=source_type,
         calibration_seconds=seconds,
         source_fps=fps,
@@ -104,6 +100,7 @@ def run(frames, face_present, source_type="video", seconds=1.0, fps=25.0, build_
         solve_pose_vectors=lambda *_: {"x_angle": 0.0, "y_angle": 0.0},
         build_calibration_profile=build_profile or fake_build_profile,
     )
+    captured["timestamps"] = detector.timestamps
     return result, cap, captured
 
 
@@ -165,6 +162,18 @@ def test_pressing_q_reports_quit(monkeypatch):
     (profile, status), _, _ = run(frames=100, face_present=True)
     assert profile is None
     assert status == CALIBRATION_QUIT
+
+
+def test_video_calibration_gives_the_detector_video_time_in_milliseconds():
+    _, _, captured = run(frames=100, face_present=True, seconds=1.0, fps=25.0)
+    assert captured["timestamps"][:3] == [40.0, 80.0, 120.0]
+
+
+def test_webcam_calibration_gives_the_detector_elapsed_wall_clock_time(monkeypatch):
+    ticks = iter([10.0, 10.5, 11.0, 12.5, 13.0, 14.0, 15.0])
+    monkeypatch.setattr(calibration_runtime.time, "perf_counter", lambda: next(ticks))
+    _, _, captured = run(frames=50, face_present=True, source_type="webcam", seconds=2.0, fps=30.0)
+    assert captured["timestamps"][:2] == [500.0, 1000.0]
 
 
 def test_closing_the_window_during_calibration_quits(monkeypatch):

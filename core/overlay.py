@@ -7,6 +7,7 @@ FONT = cv2.FONT_HERSHEY_SIMPLEX
 FONT_SCALE = 0.55
 LINE_HEIGHT = 22
 MARGIN = 6
+OUTLINE_OFFSETS = [(dx, dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx, dy) != (0, 0)]
 
 GREEN = (0, 255, 0)
 YELLOW = (0, 255, 255)
@@ -68,6 +69,15 @@ def panel_origin(bbox, panel_w, panel_h, frame_w, frame_h):
     return x, y
 
 
+def draw_face_contours(frame, face_2d, connections, colour=(224, 224, 224), thickness=1):
+    """Outline the eyes, brows, lips and face oval by joining the landmark pairs in `connections`."""
+    if not connections:
+        return
+    points = np.round(face_2d).astype(np.int32)
+    segments = list(points[np.asarray(connections)])
+    cv2.polylines(frame, segments, False, colour, thickness, cv2.LINE_AA)
+
+
 def draw_face_hud(frame, face_2d, lines):
     """Draw the lines in a panel attached to the face, so several faces never share the same text position."""
     frame_h, frame_w = frame.shape[:2]
@@ -77,5 +87,8 @@ def draw_face_hud(frame, face_2d, lines):
 
     for row, (text, colour) in enumerate(lines):
         origin = (x, y + (row + 1) * LINE_HEIGHT - 6)
-        cv2.putText(frame, text, origin, FONT, FONT_SCALE, (0, 0, 0), 3, cv2.LINE_AA)  # outline for legibility
+        # A dark outline keeps the text readable on any background. It is the same thin text drawn one pixel
+        # away in every direction: a thicker font would have different letter spacing in some OpenCV versions.
+        for dx, dy in OUTLINE_OFFSETS:
+            cv2.putText(frame, text, (origin[0] + dx, origin[1] + dy), FONT, FONT_SCALE, (0, 0, 0), 1, cv2.LINE_AA)
         cv2.putText(frame, text, origin, FONT, FONT_SCALE, colour, 1, cv2.LINE_AA)

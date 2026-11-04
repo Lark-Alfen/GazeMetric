@@ -111,3 +111,66 @@ def test_drawing_stays_inside_a_small_frame_and_inside_its_own_panel():
     x0, y0, x1, y1 = inked_area(frame)
     assert x0 >= 0 and y0 >= 0 and x1 < 300 and y1 < 200
     assert y1 - y0 <= LINE_HEIGHT * 7
+
+
+# ---------------------------------------------------------------- face contours
+from core.overlay import draw_face_contours  # noqa: E402
+
+
+def test_contours_are_drawn_along_the_connections_only():
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    face_2d = np.zeros((478, 2))
+    face_2d[3] = (10, 20)
+    face_2d[4] = (90, 20)
+    face_2d[5] = (50, 80)  # not connected to anything
+    draw_face_contours(frame, face_2d, [(3, 4)])
+    ys, xs = np.nonzero(frame.any(axis=2))
+    assert 20 in set(ys) and set(ys) <= {19, 20, 21}  # a horizontal line at y = 20, softened by anti-aliasing
+    assert abs(xs.min() - 10) <= 1 and abs(xs.max() - 90) <= 1
+    assert not frame[80, 50].any()
+
+
+def test_no_connections_draws_nothing():
+    frame = np.zeros((50, 50, 3), dtype=np.uint8)
+    draw_face_contours(frame, np.zeros((478, 2)), [])
+    draw_face_contours(frame, np.zeros((478, 2)), None)
+    assert not frame.any()
+
+
+def test_contour_points_outside_the_frame_do_not_crash():
+    frame = np.zeros((50, 50, 3), dtype=np.uint8)
+    face_2d = np.zeros((478, 2))
+    face_2d[0] = (-30, -30)
+    face_2d[1] = (500, 400)
+    draw_face_contours(frame, face_2d, [(0, 1)])
+    assert frame.any()  # the visible part of the line
+
+
+def test_many_connections_use_float_landmarks():
+    frame = np.zeros((60, 60, 3), dtype=np.uint8)
+    face_2d = np.random.default_rng(1).uniform(5, 55, (478, 2))
+    draw_face_contours(frame, face_2d, [(i, i + 1) for i in range(100)], colour=(0, 255, 0))
+    assert frame[..., 1].any() and not frame[..., 0].any()
+
+
+# ---------------------------------------------------------------- the outline stays attached to the text
+def text_boxes(frame):
+    """Bounding boxes of the coloured text pixels and of the dark outline pixels, on a mid-grey frame."""
+    b, g, r = (frame[..., i].astype(int) for i in range(3))
+    coloured = (abs(g - r) > 120) | (abs(g - b) > 120)
+    dark = (b < 60) & (g < 60) & (r < 60)
+
+    def box(mask):
+        ys, xs = np.nonzero(mask)
+        return xs.min(), ys.min(), xs.max(), ys.max()
+
+    return box(coloured), box(dark)
+
+
+def test_the_dark_outline_hugs_the_text_whatever_the_opencv_version():
+    # With OpenCV 5 a thicker outline font was about 7% wider than the text, so the two drifted apart.
+    frame = np.full((300, 600, 3), 127, dtype=np.uint8)
+    draw_face_hud(frame, face_points(200, 150, 400, 290), hud(engagement="Not Engaged", warnings=["Low light", "Face off-center"]))
+    (cx0, cy0, cx1, cy1), (dx0, dy0, dx1, dy1) = text_boxes(frame)
+    assert cx0 - 3 <= dx0 <= cx0 and cx1 <= dx1 <= cx1 + 3
+    assert cy0 - 3 <= dy0 <= cy0 and cy1 <= dy1 <= cy1 + 3

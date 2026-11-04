@@ -7,6 +7,7 @@ import engagement_analysis_full
 import engagement_analysis_live
 import engagement_analysis_recorded
 from core.cli import add_common_arguments, validate_common_arguments
+from core.face_landmarker import DEFAULT_MODEL_PATH
 
 COMMON_DESTS = {
     "output_video_path",
@@ -16,6 +17,7 @@ COMMON_DESTS = {
     "calibration_profile",
     "max_faces",
     "no_display",
+    "face_model",
 }
 
 
@@ -42,6 +44,7 @@ def test_common_arguments_and_defaults():
     assert args.calibration_seconds == 10.0
     assert args.no_display is False
     assert args.max_faces == 2
+    assert args.face_model == DEFAULT_MODEL_PATH
 
 
 def test_common_arguments_accept_every_option():
@@ -161,3 +164,13 @@ def test_invalid_values_are_rejected(monkeypatch, capsys, flag, value, message):
         parse(engagement_analysis_live, monkeypatch, flag, value)
     assert exit_info.value.code == 2
     assert message in capsys.readouterr().err
+
+
+def test_face_model_option_everywhere(monkeypatch, clip):
+    for module, argv in (
+        (engagement_analysis_live, []),
+        (engagement_analysis_recorded, ["--input", clip]),
+        (engagement_analysis_full, []),
+    ):
+        assert parse(module, monkeypatch, *argv).face_model == DEFAULT_MODEL_PATH
+        assert parse(module, monkeypatch, *argv, "--face-model", "x/model.task").face_model == "x/model.task"
