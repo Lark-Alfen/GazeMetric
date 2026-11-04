@@ -3,7 +3,7 @@
 # download_face_model.py. mediapipe 1.x no longer depends on protobuf, jax or scipy.
 mediapipe>=1.2.2,<2
 numpy>=2.0
-opencv-contrib-python>=4.11.0.86
+opencv-contrib-python>=5.0.0.93
 matplotlib>=3.10
 
 # Transitive dependencies kept at patched releases (pip-audit).
