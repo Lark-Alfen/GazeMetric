@@ -22,85 +22,89 @@ Core capabilities:
 
 ## What You Need
 
-- Python 3.11 or 3.12
+- Python 3.11 or 3.12 (the automated tests run on both)
 - A webcam (for live mode) or a video file (for recorded mode)
 
-## Quick Setup (Windows)
+Tested on Windows (development) and Linux (the CI runs on Ubuntu). macOS is not tested.
 
-1. Open PowerShell in the project folder.
-2. Create a virtual environment:
+## Setup
 
-   ```powershell
-   python -m venv .venv
-   ```
+Run these from the project folder. After the virtual environment is activated, the same `python ...` commands
+work on every system.
 
-3. Activate it:
-
-   ```powershell
-   .\.venv\Scripts\Activate.ps1
-   ```
-
-4. Install dependencies:
-
-   ```powershell
-   pip install -r requirements.txt
-   ```
-
-If your machine complains about text encoding while installing, run:
+**Windows (PowerShell)**
 
 ```powershell
-Get-Content requirements.txt -Encoding Unicode | Set-Content requirements_utf8.txt -Encoding utf8
-pip install -r requirements_utf8.txt
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 ```
+
+**macOS / Linux (bash or zsh)**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Notes:
+- On a fresh Linux machine OpenCV may need the system library `libgl1` (`sudo apt-get install libgl1`).
+- macOS asks for camera permission the first time: allow it for the terminal (or editor) you start the script
+  from, in System Settings > Privacy & Security > Camera, then run the script again.
+- Under WSL the webcam is not available by default; use recorded video mode there.
+- To run the tests as well: `pip install -r requirements-dev.txt` and then `python -m pytest`.
 
 ## How To Run
 
+Activate the virtual environment first (see above), then:
+
 ### 1) Live Webcam Mode
 
-```powershell
-.\.venv\Scripts\python.exe engagement_analysis_live.py
+```
+python engagement_analysis_live.py
 ```
 
 ### 2) Recorded Video Mode
 
 Put your video in the `Video` folder (or use any full path), then run:
 
-```powershell
-.\.venv\Scripts\python.exe engagement_analysis_recorded.py --input "Video\your_video.mp4"
+```
+python engagement_analysis_recorded.py --input "Video/your_video.mp4"
 ```
 
 ### 3) Full Script (Main Engine)
 
 Webcam:
 
-```powershell
-.\.venv\Scripts\python.exe engagement_analysis_full.py
+```
+python engagement_analysis_full.py
 ```
 
 Video:
 
-```powershell
-.\.venv\Scripts\python.exe engagement_analysis_full.py --source video --input "Video\your_video.mp4"
+```
+python engagement_analysis_full.py --source video --input "Video/your_video.mp4"
 ```
 
 ## Useful Options
 
 Skip calibration:
 
-```powershell
-.\.venv\Scripts\python.exe engagement_analysis_full.py --skip-calibration
+```
+python engagement_analysis_full.py --skip-calibration
 ```
 
 Save annotated output video:
 
-```powershell
-.\.venv\Scripts\python.exe engagement_analysis_full.py --source video --input "Video\your_video.mp4" --output-video "runs\annotated.mp4"
+```
+python engagement_analysis_full.py --source video --input "Video/your_video.mp4" --output-video "runs/annotated.mp4"
 ```
 
 Choose report base folder:
 
-```powershell
-.\.venv\Scripts\python.exe engagement_analysis_full.py --source video --input "Video\your_video.mp4" --timeline-dir "runs\my_runs"
+```
+python engagement_analysis_full.py --source video --input "Video/your_video.mp4" --timeline-dir "runs/my_runs"
 ```
 
 ## Output Files
