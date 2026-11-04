@@ -49,7 +49,9 @@ pip install -r requirements.txt
 ```
 
 Notes:
-- On a fresh Linux machine OpenCV may need the system library `libgl1` (`sudo apt-get install libgl1`).
+- On a fresh Linux machine OpenCV and MediaPipe need a few system libraries; on Ubuntu/Debian:
+  `sudo apt-get install libgl1 libegl1 libgles2`. (`libgl1` for OpenCV and `libegl1` for MediaPipe were both
+  missing on the CI runner; `libgles2` is added as a precaution and not confirmed to be required.)
 - macOS asks for camera permission the first time: allow it for the terminal (or editor) you start the script
   from, in System Settings > Privacy & Security > Camera, then run the script again.
 - Under WSL the webcam is not available by default; use recorded video mode there.

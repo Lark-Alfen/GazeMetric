@@ -24,7 +24,7 @@ jobs:
             requirements-dev.txt
 
       - name: Install system libraries needed by OpenCV and MediaPipe
-        run: sudo apt-get update && sudo apt-get install -y libgl1 libportaudio2
+        run: sudo apt-get update && sudo apt-get install -y libgl1 libegl1 libgles2 libportaudio2
 
       - name: Install dependencies
         run: |
