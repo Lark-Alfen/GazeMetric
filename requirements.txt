@@ -8,4 +8,4 @@ matplotlib>=3.10
 
 # Transitive dependencies kept at patched releases (pip-audit).
 Pillow>=13.0.0
-fonttools>=4.60.2
+fonttools>=4.68.0
