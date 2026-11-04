@@ -2,12 +2,14 @@
 
 from collections import Counter
 
+from core import APP_NAME
+
 LINE = "=" * 70
 
 
 def print_startup_banner(source_type="webcam", show_window=True):
     print(LINE)
-    print("       EngageVision - Full Engagement Analysis System")
+    print(f"       {APP_NAME} - Full Engagement Analysis System")
     print(LINE)
     print("\nFeatures:")
     print("  - Head pose estimation (Looking Left/Right/Down/Straight)")

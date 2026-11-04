@@ -5,6 +5,7 @@ import os
 from collections import Counter
 from datetime import datetime, timezone
 
+from core import APP_NAME
 from core.timeline import POSE_UNAVAILABLE_LABEL
 
 
@@ -186,7 +187,7 @@ def create_summary_pdf(summary_payload, timeline_records, pdf_path):
     colours = ["#2a9d8f", "#e76f51", "#457b9d", "#e9c46a", "#6d597a", "#8ab17d"]
 
     figure, axes = plt.subplots(2, 2, figsize=(14, 9))
-    figure.suptitle("EngageVision Session Summary", fontsize=16, fontweight="bold")
+    figure.suptitle(f"{APP_NAME} Session Summary", fontsize=16, fontweight="bold")
 
     score_ax = axes[0][0]
     if any(engagement_series.values()):

@@ -188,7 +188,7 @@ def test_the_banner_is_printed_before_calibration_starts(main_run, video):
     main_run.keys = [ord("q")]
     assert main_run.run(main_run.args(video, skip_calibration=False)) == 0
     output = main_run.output
-    assert "EngageVision - Full Engagement Analysis System" in output
+    assert "GazeMetric - Full Engagement Analysis System" in output
     assert output.index("Full Engagement Analysis System") < output.index("Calibration step started")
     assert output.count("Full Engagement Analysis System") == 1
 
