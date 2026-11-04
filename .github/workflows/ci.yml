@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
@@ -23,13 +23,16 @@ jobs:
             requirements.txt
             requirements-dev.txt
 
-      - name: Install system libraries needed to import OpenCV
-        run: sudo apt-get update && sudo apt-get install -y libgl1
+      - name: Install system libraries needed by OpenCV and MediaPipe
+        run: sudo apt-get update && sudo apt-get install -y libgl1 libportaudio2
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
+
+      - name: Download the face model
+        run: python download_face_model.py
 
       - name: Lint
         run: ruff check .

@@ -20,7 +20,7 @@ def fake_face(overrides=None, width=1000, height=800):
     points = {index: (0.5, 0.5) for index in range(LANDMARK_COUNT)}
     points.update(overrides or {})
     landmarks = [SimpleNamespace(x=points[i][0], y=points[i][1], z=0.0) for i in range(LANDMARK_COUNT)]
-    return SimpleNamespace(landmark=landmarks), width, height
+    return landmarks, width, height
 
 
 def eye_points(inner, outer, iris, top, bottom, iris_y):

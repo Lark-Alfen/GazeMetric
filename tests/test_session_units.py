@@ -143,7 +143,7 @@ def run_calibration_with(monkeypatch, generated, status, args=None, cap=None):
         return generated, status
 
     monkeypatch.setattr(app, "run_calibration_phase", fake)
-    models = SimpleNamespace(face_mesh="fm", mp_face_mesh="mpfm", mp_drawing="draw", leye_3d="l", reye_3d="r")
+    models = SimpleNamespace(detector=SimpleNamespace(restart=lambda: seen.setdefault("restarted", True)), leye_3d="l", reye_3d="r")
     result = app.load_or_run_calibration(args or make_args(), cap or FakeCap(), models, 25.0)
     return result, seen
 
@@ -160,6 +160,7 @@ def test_a_fresh_calibration_is_used_and_saved(monkeypatch, tmp_path, capsys):
     assert target.is_file()
     assert "Saved calibration profile" in capsys.readouterr().out
     assert seen["calibration_seconds"] == 5.0 and seen["show_window"] is True and seen["source_type"] == "video"
+    assert seen["detector"] is not None and seen["restarted"] is True
     assert cap.seeks == [(cv2.CAP_PROP_POS_FRAMES, 0)]  # a video is rewound so the whole clip is analysed
 
 
@@ -297,7 +298,7 @@ def test_each_session_state_has_its_own_collections_and_tracker():
 def test_release_resources_releases_everything_even_if_the_video_close_fails(monkeypatch):
     closed = {"mesh": False, "windows": 0}
     monkeypatch.setattr(app.cv2, "destroyAllWindows", lambda: closed.__setitem__("windows", closed["windows"] + 1))
-    models = SimpleNamespace(face_mesh=SimpleNamespace(close=lambda: closed.__setitem__("mesh", True)))
+    models = SimpleNamespace(detector=SimpleNamespace(close=lambda: closed.__setitem__("mesh", True)))
     cap = FakeCap()
 
     class BadWriter:
@@ -311,5 +312,5 @@ def test_release_resources_releases_everything_even_if_the_video_close_fails(mon
 
 def test_release_resources_skips_windows_without_a_display(monkeypatch):
     monkeypatch.setattr(app.cv2, "destroyAllWindows", lambda: pytest.fail("no window to destroy"))
-    models = SimpleNamespace(face_mesh=SimpleNamespace(close=lambda: None))
+    models = SimpleNamespace(detector=SimpleNamespace(close=lambda: None))
     app.release_resources(make_args(no_display=True), FakeCap(), None, models)

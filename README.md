@@ -2,7 +2,7 @@
 
 GazeMetric is a real-time engagement analytics project for webcam and recorded video sessions.
 
-Under the hood, it uses MediaPipe face landmarks, OpenCV-based head pose estimation, gaze-direction heuristics, and calibration-aware thresholds to classify attention behavior frame by frame. The system also computes a composite engagement score, tracks signal quality/confidence, and exports full session reports.
+Under the hood, it uses MediaPipe Face Landmarker landmarks, OpenCV-based head pose estimation, gaze-direction heuristics, and calibration-aware thresholds to classify attention behavior frame by frame. The system also computes a composite engagement score, tracks signal quality/confidence, and exports full session reports.
 
 Core capabilities:
 - head direction estimation (left, right, up, down, straight)
@@ -22,7 +22,7 @@ Core capabilities:
 
 ## What You Need
 
-- Python 3.11 or 3.12 (the automated tests run on both)
+- Python 3.11, 3.12 or 3.13 (the automated tests run on all three)
 - A webcam (for live mode) or a video file (for recorded mode)
 
 Tested on Windows (development) and Linux (the CI runs on Ubuntu). macOS is not tested.
@@ -53,6 +53,14 @@ Notes:
 - macOS asks for camera permission the first time: allow it for the terminal (or editor) you start the script
   from, in System Settings > Privacy & Security > Camera, then run the script again.
 - Under WSL the webcam is not available by default; use recorded video mode there.
+- Download the face model once (about 4 MB, checked against a known SHA-256):
+
+  ```
+  python download_face_model.py
+  ```
+
+  It is saved to `Models/face_landmarker.task`, which git ignores. To keep the model somewhere else, save it
+  there and pass `--face-model PATH` when you run a script.
 - To run the tests as well: `pip install -r requirements-dev.txt` and then `python -m pytest`.
 
 ## How To Run
@@ -103,6 +111,7 @@ All three scripts accept these options (`engagement_analysis_full.py` also takes
 | `--skip-calibration` | off | Don't calibrate; use the default thresholds. |
 | `--calibration-seconds S` | `10` | Length of the calibration step. |
 | `--calibration-profile FILE` | none | Load this calibration profile if the file exists, otherwise calibrate and save it there. |
+| `--face-model PATH` | `Models/face_landmarker.task` | The MediaPipe Face Landmarker model file (see Setup). |
 | `--max-faces N` | `2` | Maximum number of faces tracked at the same time. |
 | `--no-display` | off | No preview window; prints progress instead. For batch runs and machines without a display. |
 
@@ -211,8 +220,8 @@ A face that was detected but whose head pose could not be solved is recorded as 
   who know about it and agree to it, and follow the rules that apply to you (workplace, school, data
   protection law).
 - Everything stays on your computer: results go to the `runs` folder (ignored by git), calibration profiles to
-  the path you give, the annotated video only if you ask for it. The project's own code makes no network
-  connections. The annotated video contains the faces from the input.
+  the path you give, the annotated video only if you ask for it. The only thing in the project that connects to the
+  internet is `download_face_model.py`, which you run yourself once to fetch the model; analysis never does. The annotated video contains the faces from the input.
 - To delete results, delete the `session_<timestamp>` folder, or the whole `runs` folder. Delete profile files and
   annotated videos yourself; nothing is cleaned up automatically.
 - The labels are heuristics from face landmarks, not a measurement of attention or of what a person is thinking.

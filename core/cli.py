@@ -1,5 +1,7 @@
 """Command-line options shared by the three entry points."""
 
+from core.face_landmarker import DEFAULT_MODEL_PATH
+
 
 def add_common_arguments(parser):
     parser.add_argument(
@@ -29,6 +31,11 @@ def add_common_arguments(parser):
         "--calibration-profile",
         default=None,
         help="Optional JSON path to load/save calibration profile.",
+    )
+    parser.add_argument(
+        "--face-model",
+        default=DEFAULT_MODEL_PATH,
+        help="Path to the MediaPipe face_landmarker.task model (default: Models/face_landmarker.task; get it with download_face_model.py).",
     )
     parser.add_argument(
         "--max-faces",

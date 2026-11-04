@@ -22,7 +22,7 @@ def make_video(path, frames=40):
     writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), FPS, (WIDTH, HEIGHT))
     assert writer.isOpened()
     for i in range(frames):
-        writer.write(np.full((HEIGHT, WIDTH, 3), 40 + i, dtype=np.uint8))
+        writer.write(np.full((HEIGHT, WIDTH, 3), (40 + i) % 256, dtype=np.uint8))
     writer.release()
     return str(path)
 
@@ -49,27 +49,36 @@ def fake_landmarks(shift_x=0.0, yaw=-10):
     points[159], points[145] = (0.40, 0.43), (0.40, 0.47)
     points[386], points[374] = (0.58, 0.43), (0.58, 0.47)
     points[:, 0] += shift_x
-    return SimpleNamespace(landmark=[SimpleNamespace(x=float(x), y=float(y), z=0.0) for x, y in points])
+    return [SimpleNamespace(x=float(x), y=float(y), z=0.0) for x, y in points]
 
 
-class FakeFaceMesh:
+class FakeDetector:
+    """Stands in for core.face_landmarker.FaceLandmarkDetector: same interface, faces made up by the test."""
+
     instances = []
     faces = 1
     people = None  # optional [(shift_x, yaw), ...]; the detection order flips on every other frame
     calls = 0
+    contour_connections = [(0, 1), (1, 2), (2, 3)]
 
-    def __init__(self, **_kwargs):
+    def __init__(self, model_path, max_faces=2, **_kwargs):
+        self.model_path = model_path
+        self.max_faces = max_faces
         self.closed = False
-        FakeFaceMesh.instances.append(self)
+        self.restarts = 0
+        self.timestamps = []
+        FakeDetector.instances.append(self)
 
-    def process(self, _frame):
-        if FakeFaceMesh.people:
-            FakeFaceMesh.calls += 1
-            people = FakeFaceMesh.people if FakeFaceMesh.calls % 2 else FakeFaceMesh.people[::-1]
-            return SimpleNamespace(multi_face_landmarks=[fake_landmarks(shift, yaw) for shift, yaw in people])
-        if not FakeFaceMesh.faces:
-            return SimpleNamespace(multi_face_landmarks=None)
-        return SimpleNamespace(multi_face_landmarks=[fake_landmarks() for _ in range(FakeFaceMesh.faces)])
+    def detect(self, _frame, timestamp_ms):
+        self.timestamps.append(int(timestamp_ms))
+        if FakeDetector.people:
+            FakeDetector.calls += 1
+            people = FakeDetector.people if FakeDetector.calls % 2 else FakeDetector.people[::-1]
+            return [fake_landmarks(shift, yaw) for shift, yaw in people]
+        return [fake_landmarks() for _ in range(FakeDetector.faces)]
+
+    def restart(self):
+        self.restarts += 1
 
     def close(self):
         self.closed = True
@@ -77,8 +86,6 @@ class FakeFaceMesh:
 
 class MainRun:
     def __init__(self, tmp_path, monkeypatch):
-        import mediapipe as mp
-
         self.tmp_path = tmp_path
         self.monkeypatch = monkeypatch
         self.keys = []  # scripted waitKey return values, then -1
@@ -86,12 +93,14 @@ class MainRun:
         self.captures = []
         self.output = ""
 
-        FakeFaceMesh.instances = []
-        FakeFaceMesh.faces = 1
-        FakeFaceMesh.people = None
-        FakeFaceMesh.calls = 0
-        monkeypatch.setattr(mp.solutions.face_mesh, "FaceMesh", FakeFaceMesh)
-        monkeypatch.setattr(mp.solutions.drawing_utils, "draw_landmarks", lambda **_kwargs: None)
+        FakeDetector.instances = []
+        FakeDetector.faces = 1
+        FakeDetector.people = None
+        FakeDetector.calls = 0
+        monkeypatch.setattr("engagement_analysis_full.FaceLandmarkDetector", FakeDetector)
+        self.model_path = str(tmp_path / "face_landmarker.task")
+        with open(self.model_path, "wb") as handle:
+            handle.write(b"stand-in for the model file; the fake detector never reads it")
 
         real_capture = cv2.VideoCapture
         run = self
@@ -119,8 +128,8 @@ class MainRun:
         return self.keys.pop(0) if self.keys else -1
 
     @property
-    def face_mesh(self):
-        return FakeFaceMesh.instances[-1]
+    def detector(self):
+        return FakeDetector.instances[-1]
 
     def args(self, video, **overrides):
         values = dict(
@@ -134,6 +143,7 @@ class MainRun:
             no_display=False,
             camera_index=0,
             max_faces=2,
+            face_model=self.model_path,
         )
         values.update(overrides)
         return argparse.Namespace(**values)
@@ -161,7 +171,6 @@ class MainRun:
 
 @pytest.fixture
 def main_run(tmp_path, monkeypatch):
-    pytest.importorskip("mediapipe")
     return MainRun(tmp_path, monkeypatch)
 
 

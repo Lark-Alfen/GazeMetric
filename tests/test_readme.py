@@ -51,8 +51,15 @@ def test_the_score_weights_in_the_readme_match_the_code():
 def test_the_python_versions_match_the_ci_matrix():
     with open(".github/workflows/ci.yml", encoding="utf-8") as handle:
         ci = handle.read()
-    assert 'python-version: ["3.11", "3.12"]' in ci
-    assert "Python 3.11 or 3.12" in README
+    versions = re.search(r"python-version: \[(.*?)\]", ci).group(1).replace('"', "").split(", ")
+    assert len(versions) >= 2
+    expected = ", ".join(versions[:-1]) + " or " + versions[-1]
+    assert f"Python {expected}" in README
+
+
+def test_the_model_download_step_is_documented():
+    assert "python download_face_model.py" in README
+    assert "Models/face_landmarker.task" in README
 
 
 def test_the_obsolete_encoding_workaround_is_gone():

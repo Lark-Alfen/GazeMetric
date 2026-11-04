@@ -4,7 +4,7 @@ import pytest
 
 import core.quality
 import engagement_analysis_full
-from tests.conftest import FakeFaceMesh
+from tests.conftest import FakeDetector
 
 
 def test_a_normal_run_exits_zero_and_writes_every_frame(main_run, video):
@@ -12,20 +12,20 @@ def test_a_normal_run_exits_zero_and_writes_every_frame(main_run, video):
     rows = main_run.timeline_rows()
     assert len(rows) == 40
     assert {row["engagement_label"] for row in rows} <= {"Engaged", "Not Engaged"}
-    assert main_run.face_mesh.closed
+    assert main_run.detector.closed
     assert main_run.captures[0].released
 
 
 def test_a_run_without_faces_still_exits_zero(main_run, video):
-    FakeFaceMesh.faces = 0
+    FakeDetector.faces = 0
     assert main_run.run(main_run.args(video)) == 0
     assert {row["engagement_label"] for row in main_run.timeline_rows()} == {"No Face"}
 
 
-def test_unopenable_source_exits_nonzero_and_closes_the_face_mesh(main_run, tmp_path):
+def test_unopenable_source_exits_nonzero_and_closes_the_detector(main_run, tmp_path):
     assert main_run.run(main_run.args(str(tmp_path / "missing.mp4"))) == 1
     assert "Unable to open video file" in main_run.output
-    assert main_run.face_mesh.closed
+    assert main_run.detector.closed
     assert main_run.captures[0].released
     assert main_run.session_dir() is None  # nothing was analysed, so no empty report
 
@@ -57,7 +57,7 @@ def test_a_persistent_failure_stops_the_run_but_still_writes_reports_and_exits_o
     assert "Traceback (most recent call last)" in main_run.output
     assert "frames in a row failed" in main_run.output
     assert "Saved timeline CSV" in main_run.output
-    assert main_run.face_mesh.closed
+    assert main_run.detector.closed
     assert main_run.captures[0].released
 
 
@@ -70,14 +70,14 @@ def test_failure_during_calibration_releases_the_camera_and_exits_one(main_run, 
     assert "Traceback (most recent call last)" in main_run.output
     assert "calibration broke" in main_run.output
     assert main_run.captures[0].released
-    assert main_run.face_mesh.closed
+    assert main_run.detector.closed
 
 
 def test_quitting_during_calibration_exits_zero_and_cleans_up(main_run, video):
     main_run.keys = [ord("q")]
     assert main_run.run(main_run.args(video, skip_calibration=False)) == 0
     assert main_run.captures[0].released
-    assert main_run.face_mesh.closed
+    assert main_run.detector.closed
 
 
 @pytest.mark.parametrize("script", ["engagement_analysis_live.py", "engagement_analysis_recorded.py"])
@@ -170,7 +170,7 @@ def test_closing_the_window_ends_the_run_and_still_writes_the_reports(main_run, 
     assert len(main_run.timeline_rows()) == 12
     assert "Saved session summary JSON" in main_run.output
     assert main_run.captures[0].released
-    assert main_run.face_mesh.closed
+    assert main_run.detector.closed
 
 
 def test_closing_the_window_during_calibration_stops_before_analysis(main_run, video):
@@ -181,7 +181,7 @@ def test_closing_the_window_during_calibration_stops_before_analysis(main_run, v
     assert "Window closed" in main_run.output
     assert main_run.session_dir() is None
     assert main_run.captures[0].released
-    assert main_run.face_mesh.closed
+    assert main_run.detector.closed
 
 
 def test_the_banner_is_printed_before_calibration_starts(main_run, video):
@@ -218,7 +218,7 @@ def test_ctrl_c_still_prints_the_summary_and_writes_the_reports(main_run, video)
 
 
 def test_two_faces_keep_their_identity_when_the_detection_order_flips(main_run, video):
-    FakeFaceMesh.people = [(-0.25, -25), (0.25, 25)]  # one person turned left on the left, one turned right on the right
+    FakeDetector.people = [(-0.25, -25), (0.25, 25)]  # one person turned left on the left, one turned right on the right
 
     assert main_run.run(main_run.args(video)) == 0
 
@@ -235,7 +235,7 @@ def test_two_faces_keep_their_identity_when_the_detection_order_flips(main_run, 
 
 
 def test_each_face_smooths_its_own_score(main_run, video):
-    FakeFaceMesh.people = [(-0.25, -25), (0.25, 25)]
+    FakeDetector.people = [(-0.25, -25), (0.25, 25)]
     assert main_run.run(main_run.args(video)) == 0
     scores = {}
     for row in main_run.timeline_rows():
@@ -306,17 +306,10 @@ def test_progress_line(done, total, text):
 
 
 # ---------------------------------------------------------------- camera options
-def test_max_faces_reaches_the_face_tracker(main_run, video):
-    seen = {}
-    real_init = FakeFaceMesh.__init__
-
-    def spy(self, **kwargs):
-        seen.update(kwargs)
-        real_init(self, **kwargs)
-
-    main_run.monkeypatch.setattr(FakeFaceMesh, "__init__", spy)
+def test_max_faces_and_model_path_reach_the_detector(main_run, video):
     assert main_run.run(main_run.args(video, max_faces=4)) == 0
-    assert seen["max_num_faces"] == 4
+    assert main_run.detector.max_faces == 4
+    assert main_run.detector.model_path == main_run.model_path
 
 
 def test_the_chosen_camera_is_opened_and_a_missing_one_gives_a_helpful_error(main_run):
@@ -341,4 +334,33 @@ def test_the_chosen_camera_is_opened_and_a_missing_one_gives_a_helpful_error(mai
     assert opened[0][0] == 7
     assert "Unable to open camera 7" in main_run.output
     assert "--camera-index" in main_run.output
-    assert main_run.face_mesh.closed
+    assert main_run.detector.closed
+
+
+# ---------------------------------------------------------------- face model
+def test_a_missing_model_stops_with_instructions_before_anything_is_opened(main_run, video, tmp_path):
+    exit_code = main_run.run(main_run.args(video, face_model=str(tmp_path / "nope.task")))
+    assert exit_code == 1
+    assert "Face model not found" in main_run.output
+    assert "download_face_model.py" in main_run.output
+    assert "--face-model" in main_run.output
+    assert main_run.captures == [] and FakeDetector.instances == []
+    assert main_run.session_dir() is None
+
+
+def test_calibration_restarts_the_detector_before_the_analysis(main_run, video):
+    assert main_run.run(main_run.args(video, skip_calibration=False, calibration_seconds=1.0)) == 0
+    assert main_run.detector.restarts == 1
+    assert len(main_run.timeline_rows()) == 40
+
+
+def test_no_restart_without_calibration(main_run, video):
+    assert main_run.run(main_run.args(video)) == 0
+    assert main_run.detector.restarts == 0
+
+
+def test_the_detector_gets_the_video_position_in_milliseconds(main_run, video):
+    assert main_run.run(main_run.args(video)) == 0
+    stamps = main_run.detector.timestamps
+    assert stamps[0] == 0 and stamps[1] == 40 and stamps[25] == 1000  # 25 fps clip
+    assert stamps == sorted(set(stamps))
