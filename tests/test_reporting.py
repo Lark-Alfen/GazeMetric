@@ -32,3 +32,21 @@ def test_video_banner_does_not_mention_a_camera(capsys):
 def test_window_controls_are_listed_only_when_there_is_a_window(capsys, source_type):
     assert "video window" in banner(capsys, source_type=source_type, show_window=True)
     assert "video window" not in banner(capsys, source_type=source_type, show_window=False)
+
+
+# ---------------------------------------------------------------- one product name
+def test_banner_and_window_use_the_shared_name(capsys):
+    from core import APP_NAME
+    from core.display import WINDOW_NAME
+
+    print_startup_banner()
+    assert f"{APP_NAME} - Full Engagement Analysis System" in capsys.readouterr().out
+    assert WINDOW_NAME == f"{APP_NAME} - Full Analysis"
+    assert APP_NAME == "GazeMetric"
+
+
+def test_no_old_product_name_is_left_in_the_code():
+    import pathlib
+
+    for path in list(pathlib.Path("core").glob("*.py")) + list(pathlib.Path(".").glob("engagement_analysis_*.py")):
+        assert "engagevision" not in path.read_text(encoding="utf-8").lower(), path

@@ -2,7 +2,9 @@
 
 import cv2
 
-WINDOW_NAME = "EngageVision - Full Analysis"
+from core import APP_NAME
+
+WINDOW_NAME = f"{APP_NAME} - Full Analysis"
 
 
 def window_was_closed():
