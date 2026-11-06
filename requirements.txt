@@ -4,7 +4,7 @@
 mediapipe>=1.2.2,<2
 numpy>=2.0
 opencv-contrib-python>=4.11.0.86
-matplotlib>=3.10
+matplotlib>=3.11.2
 
 # Transitive dependencies kept at patched releases (pip-audit).
 Pillow>=13.0.0
